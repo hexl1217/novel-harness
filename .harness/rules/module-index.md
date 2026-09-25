@@ -46,6 +46,9 @@
 | 大纲质量 | `.harness/skills/plot-review/rules/大纲质量评估清单.md` |
 | 阅读体验 | `.harness/skills/rhythm-review/references/阅读体验与章节润色检查.md` |
 | 写前准备 | `.harness/skills/plot-ideation/references/章节写前准备清单.md` |
+| 正文机器预检 | `agent_core/check_draft.py`（正文过一遍可判定规则；`make check-draft`；审稿清单表零、交付清单「机器预检」行都用它） |
+| 运行时状态落盘 | `agent_core/state.py`（挂起恢复栈、开书阶段 S0–S5、已锁定题材/平台/知识包 → `.harness/state/runtime.json`；`python -m agent_core.state show`） |
+| **单章必读索引** | `.harness/rules/maps/chapter-required-reading.md`（**写章/审稿的默认加载集合入口**，避免预读全部规则；其余规则按触发条件加载） |
 | 正文落盘门禁 | `.harness/rules/maps/draft-output-map.md` |
 | **成稿交付清单** | `.harness/rules/maps/delivery-output-map.md`（**每次成稿必附 ①执行流程清单 + ②规则坚持表**） |
 | 短剧规格与提示词公式 | `.harness/rules/maps/short-drama-adaptation-map.md` |
@@ -75,6 +78,7 @@
 | `.harness/rules/maps/quality-check-map.md` | 通用质量门禁、长篇/短篇专项、五维评分 | 审稿 Agent / 写作 Agent |
 | `.harness/rules/maps/perspective-boundary-map.md` | 人物视角、叙事视角、角色/NPC 信息边界 | 规划 Agent / 写作 Agent |
 | `.harness/rules/maps/draft-output-map.md` | 正文落盘、项目骨架初始化、正文文件定位、写作恢复 | 总编 Agent / 写作 Agent / 上下文 Agent |
+| `.harness/rules/maps/chapter-required-reading.md` | 单章必读索引：默认加载集合 + 机器已接管清单 + 按需触发条件 | 写作 Agent / 审稿 Agent |
 | `.harness/rules/maps/short-drama-adaptation-map.md` | 短剧规格、镜头字段、提示词公式、三幕钩子、人物提示词、落盘约定 | 短剧编剧 Agent |
 | `.harness/rules/maps/short-drama-prompt-glossary.md` | 摄影提示词词汇库（光源/光线/景别/构图/运镜/风格选词） | 短剧编剧 Agent |
 | `.harness/rules/maps/short-drama-h3-prompt-format.md` | H3 视频提示词完整写作规范（模式判定/镜头语法/运镜/说话人/对白铁律/声音字段边界/Ref2VA 六段式/中文适配/自检） | 短剧编剧 Agent |

@@ -266,6 +266,17 @@ accepted_result：
 - next_action：恢复后继续执行的动作
 ```
 
+> **落盘要求（硬性）**：恢复点**不能只存在于对话上下文里**——会话中断或上下文压缩后会直接丢失，挂起恢复机制就悬空了。所以挂起时必须写入状态文件 `.harness/state/runtime.json`：
+>
+> ```bash
+> python -m agent_core.state push-resume <resume_id> "<挂起前的步骤>"
+> python -m agent_core.state set next_action "<恢复后继续执行的动作>"
+> python -m agent_core.state show          # 随时核对当前状态与栈深
+> ```
+>
+> 恢复时用 `pop-resume` 弹出栈顶（LIFO，与第 6 节的栈式恢复一致）。
+> 写入的内容应当是「下次会话重新读一遍就能接着干」的最小集合；纯对话内的临时细节不必写。
+
 临时任务完成后必须产出：
 
 ```text

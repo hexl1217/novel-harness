@@ -1,90 +1,29 @@
-# novel-harness Claude 入口规则
+# novel-harness Claude 入口
 
-本仓库是 `novel-harness` 小说创作系统。用户提出小说创作、审稿、规划、去 AI 味、题材分析、章节续写等请求时，优先进入 novel-harness 流程。
+@AGENTS.md
 
-## 入口说明
+## Claude Code 专用说明
 
-`.harness/agents/总编Agent.md` 是 novel-harness 的 L1 总编 Agent 定义，但普通对话模型不会自动把它当作运行入口。当前文件用于提醒 Claude/Cursor 类工具：遇到小说创作相关请求时，先读取 `.harness/agents/总编Agent.md`，再按 `.harness/agents/` 分派任务。
+上面那一行 `@AGENTS.md` 是 Claude Code 的**导入语法**，会把 `AGENTS.md` 完整加载进会话。本文件**故意只做导入，不复制任何规则**。
 
-## 自动触发
+为什么不在 `CLAUDE.md` 里再写一份：
 
-以下请求必须先加载 `.harness/agents/总编Agent.md`：
+- 此前 `AGENTS.md`、`CLAUDE.md`、`skills/novel-core/SKILL.md` 三份各自抄了一遍触发词和默认流程，实测重复度 40%–67%。改一条规则要同步三处，`CLAUDE.md` 和 `AGENTS.md` 已经开始分叉。
+- **要改规则，改 `AGENTS.md`。**`CLAUDE.md` 和 `SKILL.md` 都会跟着走。
 
-- `/novel-core`
-- 帮我写小说、写一章、写正文、续写、开书
-- 帮我构思、没灵感、后面怎么写、设计反转、设计大纲
-- 帮我审稿、查问题、查语病、查节奏、查逻辑
-- 去 AI 味、润色、人性化、提高人工特征
-- 分析题材、拆书、参考某本小说完善规则
-- 改编成短剧、AI 短剧、分镜脚本、人物提示词、10s 分镜、竖屏短剧
-- 短视频文案、话题视频、以X为话题做视频、转镜头、抖音视频、短视频分镜
+关于导入语法的两点事实（来自 Claude Code 官方文档）：
 
-## 默认流程
+- Claude Code 读 `CLAUDE.md`，不读 `AGENTS.md`，所以导入是两边共用同一份指令的正规做法。
+- 符号链接（`ln -s AGENTS.md CLAUDE.md`）在 Windows 上需要管理员权限或开发者模式，而且 Git 检出时会把符号链接退化成纯文本文件——所以这里用 `@AGENTS.md` 导入，不用符号链接。
+- 验证：下次会话执行 `/context`，确认 `CLAUDE.md` 出现在 Memory files 下。若没有，说明导入未生效。
 
-1. 读取 `.harness/agents/总编Agent.md`，作为总编 Agent 入口。
-2. 读取 `.harness/current-project.md`，确认当前小说项目。
-3. 如果当前项目仍是模板占位，先询问用户：
-   - 书名或项目名
-   - 题材
-   - 目标平台（不确定时让用户选：番茄新手向 / 起点长线向 / 先不限定）
-   - 主角
-   - 一句话世界观或开局设定
-4. 按任务类型读取对应 Agent：
-   - 规划/大纲/剧情方向：`.harness/agents/规划Agent.md`
-   - 写正文/续写章节：`.harness/agents/写作Agent.md`
-   - 审稿/去 AI 味/查问题：`.harness/agents/审稿Agent.md`
-   - 长篇状态、伏笔、设定延续：`.harness/agents/上下文Agent.md`
-   - 改编 AI 短剧/分镜/人物提示词：`.harness/agents/短剧编剧Agent.md`
-   - 短视频文案/话题视频：`.harness/agents/短视频编剧Agent.md`（先出文案）→ `.harness/agents/短视频分镜Agent.md`（转镜头）
-5. 需要语感、人性化、去 AI 味时，按需读取：
-   - `.harness/skills/human-linguistics/SKILL.md`
-   - `.harness/skills/human-linguistics/rules/去AI味最小修改指南.md`
-   - `.harness/skills/human-linguistics/rules/语病诊断手册.md`
-   - `.harness/knowledge/` 中已安装的题材、写作、去 AI 化知识包。
-   - `.harness/skills/human-linguistics/references/` 下的题材参考。
-6. 如果缺少对应题材或平台风格知识包，提示用户可通过 MCP 下载额外知识包，并重建 RAG 索引后继续。
-7. 明确写正文或续写时，按 `.harness/rules/maps/draft-output-map.md` 处理项目骨架、正文文件和恢复流程。
+## 仓库自带的可执行工具
 
-## 写小说请求默认行为
+不依赖 MCP，直接跑：
 
-用户只说“帮我写小说”或 `/novel-core 帮我写小说` 时，不要直接生成正文。
+```bash
+python -m agent_core.check_draft projects/{项目}/正文/第{N}章.md   # 正文机器预检
+python -m agent_core.state show                                    # 运行时状态与挂起恢复栈
+```
 
-先做开书规划：
-
-1. 判断是否已有当前项目。
-2. 没有项目时，引导创建项目档案。
-3. 如果用户不知道写什么、已有项目未记录目标平台，或没有明确目标平台，先做平台素材推荐：新手优先番茄热门方向，再补起点长线结构对照；不要默认只搜索起点。
-4. 有项目但缺少大纲时，先输出 2-3 个开局方向。
-5. 用户确认方向后，再写正文。
-6. 正文生成后，默认做一次轻量审稿。
-
-进入背景设定、大纲、章纲或正文前，必须确认 `projects/{项目名}/` 已初始化；只有 `.harness/current-project.md` 指针不够。骨架缺失时按 `.harness/rules/maps/draft-output-map.md` 处理：明确写正文就初始化本地骨架并恢复写作；只输出方案或不落盘时不创建文件。
-
-规划 Agent 可以设计背景故事、世界观、全书大纲、卷纲、章纲和黄金三章，但输出默认是候选方案；用户确认后才允许写入项目档案或作为写作输入。
-
-用户完善、参考或修改具体设定/大纲时，先做关键词检测；命中设定、世界观、金手指、体系、大纲、卷纲、章纲、黄金三章、主线、伏笔等对象，并同时命中修改、调整、完善、参考、查询、扩展、细化等动作时，必须先用 subagent 隔离上下文。
-
-写正文、章纲或细纲前必须确认目标字数：约 2000、约 2500、约 3000+，或用户指定字数。目标字数会影响情节点数量、场景数量和章尾钩子设计。
-
-开书推荐必须保持流程进度：
-
-- 推荐题材、平台或知识包时，只返回候选，不直接写大纲或正文。
-- 候选只推荐一轮；用户选择后立刻锁定 `selected_topic / selected_platform / selected_pack`。
-- 锁定后恢复开书流程，提示下一步，不要丢失 `next_action`。
-
-## 约束
-
-- 不要把 `legacy-skills/` 当作当前入口，它是本地旧版资产。
-- 不要一次性加载 `.harness/agents/` 全部文件，只按任务读取。
-- 不要在没有项目上下文时直接长篇输出正文。
-- 修改正文前，先确认用户是要“直接修改文件”还是“先给方案”。
-
-## Agent 维护规则
-
-修改 `.harness/agents/*.md` 时，默认采用“轻 Agent + Map/Reference 引用”模式：
-
-- Agent 文件只写身份、职责、流程、路由、触发条件和极短硬门禁。
-- 具体规则、清单、模板、案例、长篇说明，默认放入 `.harness/rules/maps/`、`.harness/skills/*/rules/`、`.harness/skills/*/references/` 或专项文档。
-- Agent 中只保留引用路径和“什么时候加载”的条件。
-- 除非规则必须高频执行且非常短，否则不要把大段规则直接写进 Agent。
-- 如果新增内容超过数行，先判断是否应该抽成 Map/Reference，再在 `.harness/rules/module-index.md` 中登记入口。
+单章默认加载集合见 `.harness/rules/maps/chapter-required-reading.md`。

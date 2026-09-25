@@ -18,7 +18,8 @@
 ## 默认启动流程
 
 1. 读取 `.harness/agents/总编Agent.md`，把它当作 L1 总编 Agent 入口。
-2. 读取 `.harness/current-project.md`，确认当前小说项目。
+2. 读取 `.harness/current-project.md` 确认当前小说项目，**并读一次运行时状态**：`python -m agent_core.state show`。
+   - 指针文件回答「在做哪本书」，状态文件回答「做到哪一步、下一步做什么」。挂起恢复点、开书阶段（S0–S5）、已锁定的题材/平台/知识包都在状态文件里。**两个都要看**，只看指针会出现「接着写」却不知道接哪一段。
 3. 如果当前项目仍是模板占位，先询问用户最少必要信息：
    - 书名或项目名
    - 题材
@@ -32,14 +33,14 @@
    - 长篇状态、伏笔、设定延续：`.harness/agents/上下文Agent.md`
    - 改编 AI 短剧/分镜/人物提示词：`.harness/agents/短剧编剧Agent.md`
    - 短视频文案/话题视频：`.harness/agents/短视频编剧Agent.md`（先出文案）→ `.harness/agents/短视频分镜Agent.md`（转镜头）
-5. 需要语感、人性化、去 AI 味时，按需加载：
-   - `.harness/skills/human-linguistics/SKILL.md`
-   - `.harness/skills/human-linguistics/rules/去AI味最小修改指南.md`
-   - `.harness/skills/human-linguistics/rules/语病诊断手册.md`
-   - `.harness/knowledge/` 中已安装的题材、写作、去 AI 化知识包。
-   - 题材相关参考文件，如求生、电竞等 skill 内部 references。
-6. 如果缺少对应题材或平台风格知识包，提示用户可通过 MCP 下载额外知识包，并重建 RAG 索引后继续。
-7. 明确写正文或续写时，按 `.harness/rules/maps/draft-output-map.md` 处理项目骨架、正文文件和恢复流程。
+5. **写章或审稿前先读 `.harness/rules/maps/chapter-required-reading.md`** —— 它是单章默认加载集合的**唯一入口**。默认只读它列出的那几页（合计 268 行）；其余规则按索引里的触发条件加载，**不要预读全部规则**（旧默认集合 2913 行，是归档步骤被跳过的直接原因）。
+6. 需要语感、人性化、去 AI 味时，**先跑机器预检，再按报出的条目查规则**：
+   - `python -m agent_core.check_draft <正文路径>` —— 覆盖 T0 禁句、指纹词、进行病、句段长度、标点、算式成行、路径与字数等字面可判定条款
+   - 只针对它报出的条目回查 `.harness/skills/human-linguistics/rules/语病诊断手册.md` 对应小节
+   - `.harness/skills/human-linguistics/rules/去AI味最小修改指南.md`（用户说「太 AI 味」时）
+   - `.harness/knowledge/` 中已安装的题材、写作、去 AI 化知识包
+7. 如果缺少对应题材或平台风格知识包，提示用户可通过 MCP 下载额外知识包，并重建 RAG 索引后继续。
+8. 明确写正文或续写时，按 `.harness/rules/maps/draft-output-map.md` 处理项目骨架、正文文件和恢复流程。
 
 ## 写小说请求的默认行为
 
@@ -50,7 +51,7 @@
 3. 如果用户不知道写什么、已有项目未记录目标平台，或没有明确目标平台，先做平台素材推荐：新手优先番茄热门方向，再补起点长线结构对照；不要默认只搜索起点。
 4. 有项目但缺少大纲时，先让规划 Agent 输出 2-3 个开局方向。
 5. 用户确认方向后，再调用写作 Agent 写正文。
-6. 正文生成后，默认用审稿 Agent 做一次轻量检查。
+6. 正文生成后，先跑 `python -m agent_core.check_draft <正文路径>`（机器预检，`error` 必须清零），再用审稿 Agent 做一次轻量检查。
 
 进入背景设定、大纲、章纲或正文前，必须确认 `projects/{项目名}/` 已初始化；只有 `.harness/current-project.md` 指针不够。骨架缺失时按 `.harness/rules/maps/draft-output-map.md` 处理：明确写正文就初始化本地骨架并恢复写作；只输出方案或不落盘时不创建文件。
 
@@ -69,9 +70,11 @@
 ## 重要约束
 
 - `.harness/agents/总编Agent.md` 是 novel-harness 的总编入口；本文件负责把用户请求路由过去。
+- **本文件（`AGENTS.md`）是入口规则的唯一实体源**。`CLAUDE.md` 通过 `@AGENTS.md` 导入，`skills/novel-core/SKILL.md` 只保留触发与路由——它们都不复制规则。要改触发词、默认流程或门禁，改这里。
 - 不要把 `legacy-skills/` 当作当前系统入口。它是本地旧版资产，已从 Git 跟踪移除。
 - 不要在没有项目上下文时直接长篇输出正文。
 - 不要把 `.harness/agents/` 当作普通资料全部一次性加载，只按任务需要加载对应 Agent。
+- 不要把 `.harness/rules/` 全部预读；默认集合以 `.harness/rules/maps/chapter-required-reading.md` 为准。
 - 修改项目文件时，先保护用户已有正文和本地未提交内容。
 
 ## Agent 维护规则

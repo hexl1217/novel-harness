@@ -91,6 +91,15 @@ S5 生成开局方案
 - next_action：{补开书核心信息 / 生成开局方向 / 生成黄金三章 / 创建项目档案}
 ```
 
+**这些字段必须落盘**，不能只记在对话里（会话一断，用户就会被重新问一遍已经选过的题材）：
+
+```bash
+python -m agent_core.state set recommendation_state S3
+python -m agent_core.state set selected_topic "<题材>"
+python -m agent_core.state set next_action "<下一步动作>"
+python -m agent_core.state show
+```
+
 锁定后的标准话术：
 
 ```text
