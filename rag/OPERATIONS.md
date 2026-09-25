@@ -523,10 +523,12 @@ RAG 验收测试
 |------|------|------|
 | `sqlite3.ProgrammingError: SQLite objects created in a thread` | 多线程访问单连接 | 已使用 thread-local 连接池，如出现请检查是否误用了全局 connection |
 | `sentence-transformers` 模型下载失败 | 无网络连接 | 手动下载模型放入 `~/.cache/huggingface/hub/`，或系统自动回退到 TF-IDF |
+| 日志出现 `sentence-transformers 不可用（AttributeError: 'NoneType' object has no attribute 'endswith'）` | HF 缓存里模型**权重文件缺失**（只下到 config/tokenizer，属于中断的残包） | 删掉该模型的缓存目录后重新下载完整模型；或接受 TF-IDF 回退（此时向量维度 = 词表大小，默认 20000，`vectors.npy` 会明显变大） |
 | 重建索引卡在 `huggingface.co` 反复超时重试 | 模型名加载会先联网做 HEAD 检查 | 加载已默认使用 `local_files_only=True`，不再联网。确需下载模型时设置 `NOVEL_HARNESS_ALLOW_MODEL_DOWNLOAD=1` |
 | 检索日志报 `向量检索失败: matmul ... size 384 is different from 11433` | HF 缓存不完整（缺模型权重）时建索引用 TF-IDF（11433 维），而查询进程无词表、回退哈希嵌入（384 维） | **已修复**：TF-IDF 词表落盘到 `rag/data/vectors/tfidf.joblib`，查询端自动复用。若仍报此错，说明词表文件缺失，重新执行一次索引构建即可 |
 | 出现 `Vector dim mismatch` 类错误但检索仍返回结果 | 维度守卫已生效：向量检索被跳过，由 FTS5/BM25 兜底 | 检查 `rag/data/vectors/tfidf.joblib` 是否存在，必要时重建索引 |
-| FTS5 搜索返回 0 结果 | query 为空或全部是停用词 | 确保查询包含非停用词的中文或英文 |
+| FTS5 搜索返回 0 结果 | query 为空或全部是停用词；或索引是旧版结构（CJK 整段被折成单 token） | 确保查询包含非停用词的中文或英文。索引写入的是**预分词内容**（单字 + 相邻双字），旧版 `chunks_fts` 表会在下次 `initialize()` 时自动重建并回填，也可手动重建索引 |
+| 升级后第一次查询日志出现「检测到旧版 external-content 结构的 chunks_fts」 | 旧结构无法存放预分词内容 | 属正常自动迁移，无需处理；迁移会从 `chunks` 表回填，不丢数据 |
 | 重建索引后结果没变化 | 向量缓存未更新 | 确认 `rag/data/` 下的 `.db` 文件和 `vectors.json` 已更新 |
 | 服务启动报端口占用 | 端口 3456 已被占用 | 改用其他端口：`uvicorn rag.src.server:app --port 3457` |
 | `gbk` 编码错误 | Windows 控制台编码问题 | 设置环境变量 `PYTHONIOENCODING=utf-8` |
@@ -537,7 +539,7 @@ RAG 验收测试
 - 索引构建日志：标准输出（stdout）
 - 服务日志：uvicorn 标准输出
 - 数据库文件：`rag/data/metadata.db`
-- 向量文件：`rag/data/vectors/vectors.json`
+- 向量文件：`rag/data/vectors/vectors.npy`（向量本体）、`meta.pkl`（chunk_id 映射）、`tfidf.joblib`（TF-IDF 词表）
 
 ### 重置到出厂状态
 

@@ -168,7 +168,7 @@ rag/
 | `scanner.py` | 去 `.harness/skills/` 找出所有 `.md` 文件 |
 | `normalizer.py` | 读每个 `.md`，提取标题、分类、优先级 |
 | `chunker.py` | 按章节切段（300-900 字一段） |
-| `embedder.py` | 把文字转成 384 个数字（向量指纹） |
+| `embedder.py` | 把文字转成向量指纹：transformer 384 维，回退 TF-IDF 时维度 = 词表大小 |
 | `indexer.py` | 指挥上面 4 个按顺序干活 |
 | `router.py` | 分析问题类型，决定搜哪类知识 |
 | `retriever.py` | 关键词 + 语义两路混合搜索 + 打分排序 |
