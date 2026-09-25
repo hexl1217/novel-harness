@@ -8,7 +8,6 @@ project.py — 小说项目管理
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field, asdict
 import datetime
 from pathlib import Path
@@ -19,6 +18,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # 与 .harness/rules/maps/draft-output-map.md 的约定对齐：
 # 创作目录在仓库根的 projects/ 下，不在 .harness/projects/ 下。
 PROJECTS_DIR = PROJECT_ROOT / "projects"
+# 当前项目指针（仓库级单例）。ProjectStore 允许注入替代路径，
+# 测试必须注入临时路径，否则会改写仓库真实的 .harness/current-project.md。
+DEFAULT_CURRENT_FILE = PROJECT_ROOT / ".harness" / "current-project.md"
 
 
 @dataclass
@@ -102,8 +104,9 @@ class ProjectStore:
     避免用 JSON 覆盖人工撰写的项目说明。
     """
 
-    def __init__(self, base_dir: Path | None = None):
+    def __init__(self, base_dir: Path | None = None, current_file: Path | None = None):
         self.base_dir = base_dir or PROJECTS_DIR
+        self.current_file = Path(current_file) if current_file else DEFAULT_CURRENT_FILE
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
@@ -167,7 +170,7 @@ class ProjectStore:
         进度说明、上一个项目等备注。这里只替换项目名行，其余原样保留，
         避免整文件覆盖丢内容。
         """
-        current_path = PROJECT_ROOT / ".harness" / "current-project.md"
+        current_path = self.current_file
         current_path.parent.mkdir(parents=True, exist_ok=True)
 
         header = "# 当前项目"
@@ -200,7 +203,7 @@ class ProjectStore:
         指针行可能带括号说明（如「书名（项目目录：`projects/xxx/`）」），
         这里只取项目名部分，与 set_current 写入的值保持对称。
         """
-        current_path = PROJECT_ROOT / ".harness" / "current-project.md"
+        current_path = self.current_file
         if not current_path.exists():
             return None
         try:

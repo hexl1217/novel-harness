@@ -11,15 +11,27 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from agent_core.engine import NovelPipelineEngine, PipelineState, StateTransitionError
-from agent_core.project import Project, ProjectStore
+from agent_core.project import DEFAULT_CURRENT_FILE, ProjectStore
 
 
 @pytest.fixture
 def engine():
     with tempfile.TemporaryDirectory() as tmpdir:
-        store = ProjectStore(base_dir=Path(tmpdir))
+        # current_file 必须一并注入临时路径：它是仓库级单例，
+        # 不注入的话 initialize()/load_project() 会改写真实的
+        # .harness/current-project.md（测试隔离缺陷）。
+        store = ProjectStore(
+            base_dir=Path(tmpdir) / "projects",
+            current_file=Path(tmpdir) / "current-project.md",
+        )
         eng = NovelPipelineEngine(store=store)
         yield eng
+
+
+def _read_pointer() -> str | None:
+    if not DEFAULT_CURRENT_FILE.exists():
+        return None
+    return DEFAULT_CURRENT_FILE.read_text(encoding="utf-8")
 
 
 class TestPipelineEngine:
@@ -138,3 +150,34 @@ class TestPipelineEngine:
         engine.reset()
         assert engine.state == PipelineState.IDLE
         assert engine.project is None
+
+
+class TestStoreIsolation:
+    """回归：测试不得触碰仓库里的真实文件。"""
+
+    def test_pointer_is_written_to_injected_file(self, engine):
+        engine.initialize("指针测试")
+        assert engine.store.current_file.exists()
+        assert engine.store.get_current() == "指针测试"
+
+    def test_pipeline_never_touches_real_current_pointer(self, engine):
+        before = _read_pointer()
+
+        engine.initialize("隔离测试")
+        engine.start_planning("大纲")
+        engine.write_chapter("第一章", "正文")
+        engine.load_project("隔离测试")
+        engine.reset()
+
+        assert _read_pointer() == before
+
+    def test_chapters_land_under_injected_projects_dir(self, engine):
+        engine.initialize("落盘测试")
+        engine.start_planning("大纲")
+        engine.write_chapter("第一章", "正文")
+
+        chapter = engine.store.chapter_path("落盘测试", 1)
+        assert chapter.exists()
+        assert chapter.name == "第1章.md"
+        assert chapter.parent.name == "正文"
+        assert engine.store.base_dir in chapter.parents

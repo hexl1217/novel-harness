@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from enum import Enum
 from collections.abc import Callable
-from typing import Any
 
 
 class StateTransitionError(Exception):
@@ -87,7 +86,6 @@ class StateMachine:
             for fn in self._on_exit.get(self._current, []):
                 fn()
 
-        old = self._current
         self._current = state
 
         # 触发 entry hooks
