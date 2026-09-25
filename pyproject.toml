@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "novel-harness"
+version = "0.2.0"
+description = "把 AI 变成小说创作团队：先规划、再写作、再审稿、还能记住上下文"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+
+dependencies = []
+
+[project.optional-dependencies]
+rag = [
+    "fastapi==0.115.6",
+    "uvicorn==0.34.0",
+    "sentence-transformers==3.4.1",
+    "scikit-learn==1.6.1",
+    "pydantic==2.10.4",
+    "rank-bm25==0.2.2",
+    "pytest==8.3.4",
+    "pytest-asyncio==0.25.0",
+]
+
+# numpy 和 faiss 需要 C 编译器，单独抽出一个 group
+# Windows 用户: pip install numpy; pip install faiss-cpu
+vector = [
+    "numpy",
+    "faiss-cpu",
+]
+
+mcp = [
+    "mcp==1.2.1",
+    "httpx==0.28.1",
+]
+
+test = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.25.0",
+    "httpx==0.28.1",
+]
+
+all = [
+    "novel-harness[rag]",
+    "novel-harness[vector]",
+    "novel-harness[mcp]",
+    "novel-harness[test]",
+]
+
+[project.scripts]
+ragctl = "rag.ragctl:main"
+
+[tool.setuptools.packages.find]
+include = ["rag*", "agent_core*"]
