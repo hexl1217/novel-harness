@@ -5,7 +5,6 @@ scanner.py - 知识源文件扫描器。
 输出相对路径与标准化 source_type。
 """
 
-import re
 from pathlib import Path
 
 from .logger import get_logger
@@ -23,40 +22,48 @@ INCLUDE_PATTERNS = [
     ".harness/project-templates/*.md",
 ]
 
-EXCLUDE_PATTERNS = [
-    "*planning*",
-    "*legacy-skills*",
-    ".harness/knowledge/user/*",
-    "*agents*",
-    "*/current-project/*",
-    "*/README*",
-    "*memory*",
-    "*cases*",
-    ".harness/rules/*",
-]
+# 排除规则：按「路径段精确相等」匹配。
+#
+# 历史实现是 ["*planning*", "*agents*", ...] 这类 glob，经 _glob_to_regex
+# 把 "*" 译成 [^/]*（不跨目录），"*planning*" 实际等价于
+# ^[^/]*planning[^/]*$ —— 只能匹配不含 "/" 的单层文件名，
+# 对任何多级路径恒为假。原 9 条排除规则里有 6 条因此完全失效。
+#
+# 改为段精确匹配后：
+#   * 真正的 planning/ 目录会被正确排除；
+#   * 名字里含 planning 的知识包（如 webnovel-creative-planning）
+#     不会被误杀——它本来就应该被索引。
+#
+# 注意 rag/config/sources.json 里的 include/exclude 目前**不被本模块读取**，
+# 两侧内容需人工保持一致。
+EXCLUDE_DIR_SEGMENTS = frozenset({
+    "planning",
+    "legacy-skills",
+    "agents",
+    "memory",
+    "cases",
+    "user",
+    "current-project",
+})
+
+EXCLUDE_PATH_PREFIXES = (
+    ".harness/rules/",
+)
+
+EXCLUDE_FILE_PREFIXES = ("README",)
 
 
-def _glob_to_regex(pattern):
-    """把本项目使用的简单 glob 模式转换成正则。"""
-    parts = pattern.split("/")
-    regex_parts = []
-    for part in parts:
-        if part == "**":
-            regex_parts.append("(.+/)?")
-        elif part == "*":
-            regex_parts.append("[^/]*")
-        else:
-            escaped = re.escape(part).replace(r"\*", "[^/]*").replace(r"\?", ".")
-            regex_parts.append(escaped)
-    return "^" + "/".join(regex_parts) + "$"
+def _is_excluded(rel_path: str) -> bool:
+    """判断相对路径是否命中排除规则。"""
+    if rel_path.startswith(EXCLUDE_PATH_PREFIXES):
+        return True
 
+    parts = Path(rel_path).parts
+    if any(segment in EXCLUDE_DIR_SEGMENTS for segment in parts):
+        return True
 
-def _path_matches(path, pattern_list):
-    path_str = str(path).replace("\\", "/")
-    for pattern in pattern_list:
-        if re.match(_glob_to_regex(pattern), path_str):
-            return True
-    return False
+    name = parts[-1] if parts else ""
+    return any(name.upper().startswith(prefix) for prefix in EXCLUDE_FILE_PREFIXES)
 
 
 def _infer_source_type(pattern):
@@ -81,7 +88,7 @@ def scan_knowledge_files():
 
         for file_path in matched_files:
             rel_path = str(file_path.relative_to(PROJECT_ROOT)).replace("\\", "/")
-            if _path_matches(rel_path, EXCLUDE_PATTERNS):
+            if _is_excluded(rel_path):
                 continue
 
             results.append({
