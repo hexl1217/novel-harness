@@ -42,6 +42,16 @@ jobs:
       - run: python -m pip install pytest
       - run: python -m pytest agent_core/test/ -v --tb=short -x
 
+  check-draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 正文机器预检（projects/ 为空时自动跳过）
+        run: python -m agent_core.check_draft projects --allow-empty
+
   schema:
     runs-on: ubuntu-latest
     steps:

@@ -112,3 +112,26 @@ def test_cli_clean_text_returns_zero(tmp_path, capsys):
     code = main([str(tmp_path / "projects" / "demo"), "--json"])
     capsys.readouterr()
     assert code == 0
+
+
+def test_cli_allow_empty_returns_zero(tmp_path, capsys):
+    """CI 场景：projects/ 为空时应通过而不是失败。"""
+    code = main([str(tmp_path / "empty"), "--allow-empty"])
+    capsys.readouterr()
+    assert code == 0
+
+
+def test_cli_without_allow_empty_fails_when_no_files(tmp_path, capsys):
+    code = main([str(tmp_path / "empty")])
+    capsys.readouterr()
+    assert code == 1
+
+
+def test_directory_without_drafts_is_skipped_not_misread(tmp_path, capsys):
+    """目录里只有非正文 md 时，不得把 项目档案.md 当正文校验。"""
+    project = tmp_path / "projects" / "demo"
+    project.mkdir(parents=True)
+    (project / "项目档案.md").write_text("不是坏了，是快废了。", encoding="utf-8")
+    code = main([str(project), "--allow-empty"])
+    capsys.readouterr()
+    assert code == 0

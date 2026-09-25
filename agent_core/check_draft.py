@@ -264,7 +264,10 @@ def collect_files(targets: list[str]) -> list[Path]:
         if path.is_dir():
             found = sorted(path.rglob("正文/*.md"))
             if not found:
-                found = sorted(path.rglob("*.md"))
+                # 不做 *.md 兜底：那会把项目档案.md 之类的非正文文件
+                # 当正文校验，产生假报。宁可跳过并说明。
+                print(f"跳过：{raw}（目录下没有 正文/*.md）", file=sys.stderr)
+                continue
             files.extend(found)
             continue
         print(f"跳过：{raw}（不存在）", file=sys.stderr)
@@ -282,10 +285,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--target", type=int, default=None, help="目标字数，用于偏差提示")
     parser.add_argument("--json", action="store_true", help="以 JSON 输出")
     parser.add_argument("--strict", action="store_true", help="warn 也计入失败退出码")
+    parser.add_argument("--allow-empty", action="store_true",
+                        help="没有可校验文件时视为通过（供 CI 在 projects/ 为空时使用）")
     args = parser.parse_args(argv)
 
     files = collect_files(args.targets)
     if not files:
+        if args.allow_empty:
+            print("没有可校验的正文文件，跳过。")
+            return 0
         print("未找到可校验的正文文件。", file=sys.stderr)
         return 1
 
