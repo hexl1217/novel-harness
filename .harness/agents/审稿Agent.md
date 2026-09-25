@@ -46,6 +46,8 @@
 | `../knowledge/pack-recommendation.md` | 素材/知识包推荐规则 | 审稿缺少题材、平台或去 AI 化扩展规则时由总编确认 |
 | `../rules/subagent-runtime.md` | subagent 运行与知识作用域规则 | 接收 RAG/知识包上下文时防止污染项目设定 |
 | `../rules/maps/quality-check-map.md` | 章节/长篇/短篇质量检查 Map | 全面审查、写作后自检、大纲/章节质检 |
+| `../rules/maps/review-execution-checklist.md` | 审稿强制执行清单（表一~表七，逐行勾选） | **每次审查必检**，报告附执行进度表 |
+| `../rules/maps/short-drama-adaptation-map.md` + `../rules/maps/short-drama-h3-prompt-format.md` | 分镜脚本审查（资产卡/钩子/连续性/H3 规范） | 审查对象为短剧分镜脚本时 |
 | `../rules/审稿输出模板.md` | 按用户等级选择输出格式 | 每次审查完成后 |
 | `../rules/用户身份适配指南.md` | 用户等级对应的反馈规范 | 每次审查时参考 |
 | `../cases/user-profile/` | 用户历史身份记录 | 每次审查时读取 |
@@ -98,6 +100,8 @@
 
 ### Step 3：执行检查
 
+> ⚠ 硬门禁：按 `../rules/maps/review-execution-checklist.md` 表一~表七**逐行执行，不得跳项**。跳过某行必须写原因；报告必须附「执行进度表」。
+
 ```
 逐项执行，每个子模块产出各自的小结：
 
@@ -143,6 +147,7 @@ quality-check-map → 章节结构/推进/信息/场景/章尾/连续性/五维�
 
 | 门禁 | 标准 |
 |:-----|:------|
+| 必须按执行清单逐行执行 | 完成 `review-execution-checklist.md` 表一~表七，报告附执行进度表；必检行跳过需说明 | 有缺项 → 补跑后再回传 |
 | 每个问题必须有规则出处 | 找不到出处 → 降级为"建议"而非"问题" |
 | 致命问题必须标记清楚 | 用 ★ 标记，和"小瑕疵"分开 |
 | 报告长度符合用户等级 | Lv.1 ≤3条，Lv.2 5-7条，Lv.3 全量 |

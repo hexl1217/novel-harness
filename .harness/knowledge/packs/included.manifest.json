@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_at": "2026-05-21",
+  "updated_at": "2026-09-23",
   "description": "novel-harness 随项目自带知识包清单",
   "packs": [
     {
@@ -43,6 +43,20 @@
       "rag": {
         "enabled": true,
         "default_task_types": ["ideation", "chapter_prewrite", "outline_review"]
+      }
+    },
+    {
+      "id": "writing-craft-classics",
+      "name": "写作技法经典书目包",
+      "version": "0.1.0",
+      "category": "writing",
+      "license": "CC BY-NC-SA 4.0",
+      "path": ".harness/knowledge/included/writing",
+      "files": ["写作技法经典书目.md"],
+      "tags": ["写作方法", "故事结构", "人物塑造", "经典书目", "麦基", "救猫咪", "小说课"],
+      "rag": {
+        "enabled": true,
+        "default_task_types": ["ideation", "chapter_prewrite", "outline_review", "draft_review"]
       }
     }
   ]

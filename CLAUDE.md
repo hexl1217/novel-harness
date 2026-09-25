@@ -16,6 +16,8 @@
 - 帮我审稿、查问题、查语病、查节奏、查逻辑
 - 去 AI 味、润色、人性化、提高人工特征
 - 分析题材、拆书、参考某本小说完善规则
+- 改编成短剧、AI 短剧、分镜脚本、人物提示词、10s 分镜、竖屏短剧
+- 短视频文案、话题视频、以X为话题做视频、转镜头、抖音视频、短视频分镜
 
 ## 默认流程
 
@@ -32,6 +34,8 @@
    - 写正文/续写章节：`.harness/agents/写作Agent.md`
    - 审稿/去 AI 味/查问题：`.harness/agents/审稿Agent.md`
    - 长篇状态、伏笔、设定延续：`.harness/agents/上下文Agent.md`
+   - 改编 AI 短剧/分镜/人物提示词：`.harness/agents/短剧编剧Agent.md`
+   - 短视频文案/话题视频：`.harness/agents/短视频编剧Agent.md`（先出文案）→ `.harness/agents/短视频分镜Agent.md`（转镜头）
 5. 需要语感、人性化、去 AI 味时，按需读取：
    - `.harness/skills/human-linguistics/SKILL.md`
    - `.harness/skills/human-linguistics/rules/去AI味最小修改指南.md`

@@ -14,6 +14,7 @@
 ├── included/  # 随项目自带的公开知识包
 ├── packs/     # 知识包 manifest、版本和来源说明
 ├── remote/    # MCP 从服务器下载的知识包，本地目录，不上传 Git
+├── pack-catalog.md         # 已装知识包总览与选包指引
 ├── pack-recommendation.md  # 写作前素材/知识包推荐规则
 └── user/      # 用户私有知识包，本地目录，不上传 Git
 ```
@@ -39,7 +40,7 @@ subagent、临时任务挂起恢复与知识作用域隔离规则见：`../rules
 
 ```text
 .harness/knowledge/included/
-.harness/knowledge/remote/
+.harness/knowledge/remote/   # 含 .md 与 .txt
 .harness/skills/
 .harness/project-templates/
 docs/
@@ -69,9 +70,16 @@ python rag/scripts/sync_packs.py --manifest <manifest路径或URL> install <pack
 
 - `deslop/`：去 AI 化、人性化、句式、语感、正则规则。
 - `topics/`：题材包，例如全民求生、游戏数据化、电竞、修仙、都市、悬疑。
-- `writing/`：写作技法，例如黄金三章、爽点、钩子、节奏、伏笔。
+- `writing/`：写作技法，例如黄金三章、爽点、钩子、节奏、伏笔；以及经典写作理论与书目（`writing-craft-classics`）。
 - `market/`：平台风格，例如番茄、起点、知乎短篇等。
 - `cases/`：自写案例、修改前后对照、问题复盘。
+
+## 已装包与选包指引
+
+- 内置包 4 个，见 `packs/included.manifest.json`。
+- 云端包 35 个，装在 `remote/`（本地包，不进 Git），覆盖玄幻仙侠、都市现实、悬疑刑侦、情感女频、末世求生、历史权谋、科幻赛博、游戏电竞、恐怖规则怪谈、短剧改编等主流方向，另有设定设计、表达润色、写作方法、流程与市场工具包。
+- 按题材选包、重叠优先级、分类与检索映射：见 `pack-catalog.md`。
+- 新增远程包后，需要在 `rag/src/normalizer.py` 的 `REMOTE_PACK_CATEGORY` 登记包名前缀，否则会落到默认分类。
 
 ## 版权边界
 

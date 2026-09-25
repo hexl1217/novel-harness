@@ -1,6 +1,6 @@
 ---
 name: novel-core
-description: 当用户使用 /novel-core，或请求写长篇网文、开书、规划剧情、写章节、审稿、去AI味、人性化润色、分析题材参考时使用。该 skill 是 novel-harness 工程的启动入口，会加载 .harness/agents/总编Agent.md，并按 .harness/agents/ 路由到规划、写作、审稿、上下文 Agent。
+description: 当用户使用 /novel-core，或请求写长篇网文、开书、规划剧情、写章节、审稿、去AI味、人性化润色、分析题材参考、把小说改编成 AI 短剧（分镜脚本/人物提示词）时使用。该 skill 是 novel-harness 工程的启动入口，会加载 .harness/agents/总编Agent.md，并按 .harness/agents/ 路由到规划、写作、审稿、上下文、短剧编剧 Agent。
 ---
 
 # novel-core
@@ -16,7 +16,9 @@ description: 当用户使用 /novel-core，或请求写长篇网文、开书、�
 - `/novel-core 帮我写一章`
 - `/novel-core 去AI味`
 - `/novel-core 审稿`
+- `/novel-core 改编成短剧`
 - 写小说、开书、规划剧情、续写章节、查语病、查节奏、查逻辑、人性化润色、题材拆解
+- 改编成 AI 短剧、出分镜脚本、写人物提示词、10s 分镜、竖屏短剧
 
 ## 启动流程
 
@@ -37,6 +39,7 @@ description: 当用户使用 /novel-core，或请求写长篇网文、开书、�
    - 写正文/续写章节：`.harness/agents/写作Agent.md`
    - 审稿/去 AI 味/查问题：`.harness/agents/审稿Agent.md`
    - 长篇状态、伏笔、设定延续：`.harness/agents/上下文Agent.md`
+   - 改编 AI 短剧/分镜/人物提示词：`.harness/agents/短剧编剧Agent.md`
 6. 需要语感、人性化、去 AI 味时，按需读取：
    - `.harness/skills/human-linguistics/SKILL.md`
    - `.harness/skills/human-linguistics/rules/去AI味最小修改指南.md`

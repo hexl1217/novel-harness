@@ -13,6 +13,9 @@
 | 规划 Agent | 剧情构思、设定扩展、反转/钩子设计 | `.harness/agents/规划Agent.md` |
 | 写作 Agent | 基于大纲、约束和上下文包生成正文 | `.harness/agents/写作Agent.md` |
 | 审稿 Agent | 调用各审查子模块，执行全面或专项审查 | `.harness/agents/审稿Agent.md` |
+| 短剧编剧 Agent | 小说改编 AI 短剧，产出人物提示词与 10s 分镜脚本 | `.harness/agents/短剧编剧Agent.md` |
+| 短视频编剧 Agent | 话题 → 抖音短视频文案（故事脚本），产出开头钩子 / 起承转合 / 旁白·对白·字幕 | `.harness/agents/短视频编剧Agent.md` |
+| 短视频分镜 Agent | 短视频文案 → 竖屏分镜镜头（每镜 11 字段 + H3 出片提示词），复用短剧摄影词汇 | `.harness/agents/短视频分镜Agent.md` |
 
 ---
 
@@ -25,7 +28,8 @@
 | 通用·情节一致性 | `.harness/skills/plot-review` | 角色行为一致性、时间线、伏笔、信息边界、状态一致 |
 | 通用·节奏/爽点 | `.harness/skills/rhythm-review` | 高潮间隔、钩子密度、爽点分布、阅读体验体感 |
 | 通用·创作灵感 | `.harness/skills/plot-ideation` | 剧情构思、设定扩展、反转/钩子、多方向推演 |
-| 全局·知识包 | `.harness/knowledge` | 随项目自带知识包、MCP 下载知识包、RAG 可检索资料 |
+| 短剧·H3 视频提示词 | `.harness/skills/h3-prompt-writing` | MiniMax H3 原生格式英文权威原文（T2VA/I2VA/FL2VA/L2VA/Ref2VA + references/base-en.txt、ref-en.txt）。**硬门禁：写任何 H3 提示词前必读**（先 SKILL.md 判模式，再读对应 references/） |
+| 全局·知识包 | `.harness/knowledge` | 随项目自带知识包、MCP 下载知识包、RAG 可检索资料。**已装包总览与选包指引见 `.harness/knowledge/pack-catalog.md`**（题材→包、重叠优先级、分类映射、维护命令） |
 
 ---
 
@@ -43,14 +47,21 @@
 | 阅读体验 | `.harness/skills/rhythm-review/references/阅读体验与章节润色检查.md` |
 | 写前准备 | `.harness/skills/plot-ideation/references/章节写前准备清单.md` |
 | 正文落盘门禁 | `.harness/rules/maps/draft-output-map.md` |
+| **成稿交付清单** | `.harness/rules/maps/delivery-output-map.md`（**每次成稿必附 ①执行流程清单 + ②规则坚持表**） |
+| 短剧规格与提示词公式 | `.harness/rules/maps/short-drama-adaptation-map.md` |
+| 短剧摄影词汇库 | `.harness/rules/maps/short-drama-prompt-glossary.md` |
+| MiniMax H3 视频提示词格式 | `.harness/rules/maps/short-drama-h3-prompt-format.md`（完整规范；**写 H3 前必读**；权威英文原文见 `.harness/skills/h3-prompt-writing/`） |
 | 章节期待链 | `.harness/rules/maps/planning-continuity-map.md` |
 | 场景三维度织入 | `.harness/rules/maps/writing-execution-map.md` |
 | 对话权力与议程 | `.harness/rules/maps/writing-execution-map.md` |
 | 最小记忆包 | `.harness/rules/maps/state-tracking-map.md` |
 | 章节质量检查 | `.harness/rules/maps/quality-check-map.md` |
+| 审稿强制执行清单 | `.harness/rules/maps/review-execution-checklist.md`（审稿 Agent 每次审查逐行执行表一~表七，含分镜脚本专项） |
 | 状态追踪协议 | `.harness/rules/maps/state-tracking-map.md` |
 | 人物视角边界 | `.harness/rules/maps/perspective-boundary-map.md` |
 | 叙事视角配置 | `.harness/rules/maps/perspective-boundary-map.md` |
+| 短剧分镜脚本模板 | `.harness/rules/maps/short-drama-script-template.md`（每镜 11 字段 + 人物卡 9 字段 + 双 H3 出片 + 出片细化包通用空模板） |
+| 短视频文案规格 | `.harness/rules/maps/short-video-story-map.md`（抖音短视频规格 / 3 秒钩子 / 起承转合 / 话题拆解 / 文案形态 / 落盘约定） |
 
 ---
 
@@ -64,6 +75,11 @@
 | `.harness/rules/maps/quality-check-map.md` | 通用质量门禁、长篇/短篇专项、五维评分 | 审稿 Agent / 写作 Agent |
 | `.harness/rules/maps/perspective-boundary-map.md` | 人物视角、叙事视角、角色/NPC 信息边界 | 规划 Agent / 写作 Agent |
 | `.harness/rules/maps/draft-output-map.md` | 正文落盘、项目骨架初始化、正文文件定位、写作恢复 | 总编 Agent / 写作 Agent / 上下文 Agent |
+| `.harness/rules/maps/short-drama-adaptation-map.md` | 短剧规格、镜头字段、提示词公式、三幕钩子、人物提示词、落盘约定 | 短剧编剧 Agent |
+| `.harness/rules/maps/short-drama-prompt-glossary.md` | 摄影提示词词汇库（光源/光线/景别/构图/运镜/风格选词） | 短剧编剧 Agent |
+| `.harness/rules/maps/short-drama-h3-prompt-format.md` | H3 视频提示词完整写作规范（模式判定/镜头语法/运镜/说话人/对白铁律/声音字段边界/Ref2VA 六段式/中文适配/自检） | 短剧编剧 Agent |
+| `.harness/rules/maps/short-drama-script-template.md` | 短剧分镜脚本通用空模板（11 字段/人物卡/双 H3 出片/出片细化包），改编时套用 | 短剧编剧 Agent |
+| `.harness/rules/maps/short-video-story-map.md` | 抖音短视频文案规格、3 秒钩子、起承转合结构、话题拆解、文案形态、落盘约定 | 短视频编剧 Agent / 短视频分镜 Agent |
 
 ---
 

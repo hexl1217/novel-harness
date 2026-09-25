@@ -16,7 +16,9 @@
 - 写第一章、续写章节、按大纲写正文。
 - 用户要求参考某类题材、平台风格、去 AI 化规则或写法模板。
 
-如果用户只是让你审稿、查语病、解释规则，可以不主动推荐题材包，但可按需推荐 `deslop-basic`、`webnovel-writing-basic` 等通用包。
+如果用户只是让你审稿、查语病、解释规则，可以不主动推荐题材包，但可按需推荐 `deslop-basic`、`webnovel-writing-basic`、`writing-craft-classics` 等通用包。
+
+已装包的题材映射、重叠优先级和分类归属统一见 `.harness/knowledge/pack-catalog.md`。本文件只管「什么时候推荐」；选题材时以该总览为准，不要自己临时拼包名。
 
 ---
 
@@ -26,7 +28,8 @@
 用户请求
   -> 提取方向：题材 / 平台 / 写作阶段 / 审稿目标 / 去 AI 化目标
   -> 保存任务恢复点：原始请求 / 目标 Agent / 当前步骤 / 已有上下文 / 下一步动作
-  -> 查询本地 included + remote installed + server available
+  -> 先查 .harness/knowledge/pack-catalog.md 的「主流题材 → 包」总览与重叠优先级
+  -> 再查本地 included + remote installed + server available
   -> 找精确匹配
   -> 找不到精确匹配时，给相近选项
   -> 让用户选择
@@ -173,6 +176,7 @@ S5 生成开局方案
 ### 4.1 通用写作
 
 - `webnovel-writing-basic`：网文写作基础包，适合开书、黄金三章、章节结构。
+- `writing-craft-classics`：写作技法经典书目包，收录麦基《故事》、斯奈德《救猫咪》、毕飞宇/许荣哲《小说课》等经典理论的书目与核心方法论。适合用户问"怎么写小说/有没有写作教材/推荐写作书"，或需要人物弧光、故事结构、语言语感的深层方法论依据时使用。
 - `webnovel-creative-planning`：创意与立项规划。
 - `webnovel-setting-framework`：设定与大纲框架。
 - `webnovel-drafting-polish`：正文创作与润色。
