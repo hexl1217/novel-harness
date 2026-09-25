@@ -1,0 +1,25 @@
+{
+  "recorded_at": "2026-09-25T19:51:47",
+  "corpus": {
+    "documents": 983,
+    "chunks": 8750,
+    "vectors": 8750
+  },
+  "recall_at_5": 0.8,
+  "hit_count": 8,
+  "total": 10,
+  "per_query": {
+    "去AI味修改": false,
+    "大纲质量评估": true,
+    "写作前准备清单": true,
+    "全民求生题材": true,
+    "节奏太平": true,
+    "角色状态矛盾": true,
+    "剧情灵感": true,
+    "AI 味太重": false,
+    "检查大纲结构": true,
+    "这章读起来很拖": true
+  },
+  "latency_avg_ms": 52.9,
+  "latency_p95_ms": 55.64
+}

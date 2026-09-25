@@ -138,10 +138,44 @@ python rag/scripts/sync_packs.py --manifest <manifest路径或URL> install <pack
 
 ## 验收
 
+分两层。**两者都不能在 CI 跑**——`verify.py` 和 `benchmark.py` 依赖
+`.harness/knowledge/remote/` 里的远程知识包，而该目录被 `.gitignore` 排除
+（远程包属本地产物；CI 里只有仓库内的 32 个知识文件）。CI 覆盖的是不依赖
+知识包的部分：文件完整性、知识源扫描、任务路由，见
+`test/test_verify_structure.py`。
+
+### 端到端验收
+
 ```bash
-python rag/test/verify.py
+python rag/test/verify.py --no-build   # 复用现有索引（快）
+python rag/test/verify.py              # 先重建索引再验收（慢）
+make verify                            # 同上，走 Makefile
 ```
-预期输出：`68 passed, 0 failed, 0 warnings`
+
+覆盖 6 组检查：架构完整性 / 知识源扫描 / 任务路由 / 索引状态 / 混合检索 / 结果稳定性。
+完整模式会调用 `build_full_index()` 重写索引；`--no-build` 只读现有索引，
+适合 CI 之外的日常复检。
+
+### 检索质量基线
+
+```bash
+python rag/test/benchmark.py --check rag/test/baseline.json          # 对比基线
+python rag/test/benchmark.py --save-baseline rag/test/baseline.json  # 重新记录
+```
+
+度量 10 条 query 的 Recall@5 与检索延迟。对比基线时，以下任一情况会判失败并
+以退出码 1 结束：
+
+- Recall@5 低于基线
+- 基线中命中的某条 query 退化为未命中（能定位到具体是哪条）
+- P95 延迟超过基线 × `--latency-factor`（默认 3.0，CI 机器波动大）
+
+**当前基线：Recall@5 = 0.800（8/10）**，P95 ≈ 56ms。未命中的两条都在
+humanization（去AI味）任务上，属已知待修问题；基线会锁定它们，修好后
+可直接从对比结果看到提升。
+
+在此之前没有任何检索质量判据——改动 BM25 / FTS / 分词时只能靠单条查询的
+分数当证据，属于盲调。
 
 ---
 
