@@ -48,7 +48,10 @@ class TestEmbedder:
 
         embedder.build_vocabulary(["测试文本", "AI写作"])
         vec = embedder.embed_text("AI写作")
-        assert len(vec) == embedder.VECTOR_DIM
+        # TF-IDF 回退的维度 = 词表大小（动态），本来就不等于 VECTOR_DIM；
+        # 只要索引端与查询端共用同一套词表，两侧维度就自洽。
+        assert len(vec) > 0
+        assert len(vec) == len(embedder._tfidf_vectorizer.get_feature_names_out())
 
     def test_vocabulary_not_built(self):
         embedder._tfidf_built = False
