@@ -472,6 +472,9 @@ curl -X POST http://localhost:3456/explain-retrieval \
 - **输出维度**: 词表大小（通常 7000+）
 - **特点**: 纯本地，无需网络
 - **构建**: 在索引构建时从语料训练，自动限制最多 20000 词
+- **持久化**: 训练好的向量器落盘为 `rag/data/vectors/tfidf.joblib`。**查询进程会自动加载同一份词表**，保证查询向量与索引向量维度一致。
+  - 重建索引时会先删除旧词表（`embedder.clear_vectorizer()`），避免新旧词表混用。
+  - 若该文件缺失，查询端会退化为 384 维哈希嵌入，与 TF-IDF 索引维度不匹配，向量检索将被跳过（仅剩 FTS5/BM25）。此时重新执行一次索引构建即可恢复。
 
 ### 3. 哈希嵌入（最后防线）
 
@@ -520,6 +523,9 @@ RAG 验收测试
 |------|------|------|
 | `sqlite3.ProgrammingError: SQLite objects created in a thread` | 多线程访问单连接 | 已使用 thread-local 连接池，如出现请检查是否误用了全局 connection |
 | `sentence-transformers` 模型下载失败 | 无网络连接 | 手动下载模型放入 `~/.cache/huggingface/hub/`，或系统自动回退到 TF-IDF |
+| 重建索引卡在 `huggingface.co` 反复超时重试 | 模型名加载会先联网做 HEAD 检查 | 加载已默认使用 `local_files_only=True`，不再联网。确需下载模型时设置 `NOVEL_HARNESS_ALLOW_MODEL_DOWNLOAD=1` |
+| 检索日志报 `向量检索失败: matmul ... size 384 is different from 11433` | HF 缓存不完整（缺模型权重）时建索引用 TF-IDF（11433 维），而查询进程无词表、回退哈希嵌入（384 维） | **已修复**：TF-IDF 词表落盘到 `rag/data/vectors/tfidf.joblib`，查询端自动复用。若仍报此错，说明词表文件缺失，重新执行一次索引构建即可 |
+| 出现 `Vector dim mismatch` 类错误但检索仍返回结果 | 维度守卫已生效：向量检索被跳过，由 FTS5/BM25 兜底 | 检查 `rag/data/vectors/tfidf.joblib` 是否存在，必要时重建索引 |
 | FTS5 搜索返回 0 结果 | query 为空或全部是停用词 | 确保查询包含非停用词的中文或英文 |
 | 重建索引后结果没变化 | 向量缓存未更新 | 确认 `rag/data/` 下的 `.db` 文件和 `vectors.json` 已更新 |
 | 服务启动报端口占用 | 端口 3456 已被占用 | 改用其他端口：`uvicorn rag.src.server:app --port 3457` |

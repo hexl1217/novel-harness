@@ -4,6 +4,7 @@
   "include_patterns": [
     ".harness/knowledge/included/**/*.md",
     ".harness/knowledge/remote/**/*.md",
+    ".harness/knowledge/remote/**/*.txt",
     ".harness/skills/**/references/*.md",
     ".harness/skills/**/rules/*.md",
     ".harness/project-templates/*.md"

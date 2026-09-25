@@ -8,11 +8,16 @@ scanner.py - 知识源文件扫描器。
 import re
 from pathlib import Path
 
+from .logger import get_logger
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+logger = get_logger("scanner")
 
 INCLUDE_PATTERNS = [
     ".harness/knowledge/included/**/*.md",
     ".harness/knowledge/remote/**/*.md",
+    ".harness/knowledge/remote/**/*.txt",
     ".harness/skills/**/references/*.md",
     ".harness/skills/**/rules/*.md",
     ".harness/project-templates/*.md",
@@ -92,5 +97,5 @@ def scan_knowledge_files():
             unique.append(item)
 
     unique.sort(key=lambda x: x["rel_path"])
-    print(f"[scanner] 扫描到 {len(unique)} 个知识文件")
+    logger.info("扫描到 %d 个知识文件", len(unique))
     return unique

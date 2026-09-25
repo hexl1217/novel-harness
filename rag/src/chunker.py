@@ -12,6 +12,10 @@ chunker.py — Markdown 文档分块器
 import re
 from pathlib import Path
 
+from .logger import get_logger
+
+logger = get_logger("chunker")
+
 
 def _detect_chunk_type(text, heading_level):
     """检测块类型"""

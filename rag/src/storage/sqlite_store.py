@@ -7,7 +7,11 @@ import sqlite3
 import threading
 from pathlib import Path
 
+from ..logger import get_logger
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+
+logger = get_logger("sqlite_store")
 DB_PATH = PROJECT_ROOT / "rag" / "data" / "metadata.db"
 
 _thread_local = threading.local()
@@ -79,7 +83,7 @@ def initialize():
             INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild');
         """)
     except sqlite3.OperationalError as exc:
-        print(f"[sqlite_store] FTS5 初始化警告: {exc}")
+        logger.warning("FTS5 初始化警告: %s", exc)
 
     try:
         db.executescript("""
@@ -90,7 +94,7 @@ def initialize():
     except sqlite3.OperationalError:
         pass
 
-    print("[sqlite_store] 数据库初始化完成")
+    logger.info("数据库初始化完成")
 
 
 def upsert_document(doc):
@@ -214,7 +218,7 @@ def fts_search(query, top_n=15):
             results.append(item)
         return results
     except sqlite3.OperationalError as exc:
-        print(f"[sqlite_store] FTS 搜索失败: {exc}")
+        logger.error("FTS 搜索失败: %s", exc)
         return []
 
 
@@ -249,7 +253,7 @@ def filter_chunks(categories=None, stages=None, top_n=20):
 
         return [_row_to_dict(row) for row in rows]
     except sqlite3.OperationalError as exc:
-        print(f"[sqlite_store] 过滤查询失败: {exc}")
+        logger.error("过滤查询失败: %s", exc)
         return []
 
 

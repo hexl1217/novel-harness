@@ -12,13 +12,24 @@ embedder.py — 向量嵌入生成器
 - 模型加载为延迟加载（首次调用时初始化）
 """
 
+import os
 import re
+import joblib
 import numpy as np
 from pathlib import Path
 
+from .logger import get_logger
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# ====== 全局状态 ======
+logger = get_logger("embedder")
+
+# TF-IDF 向量器持久化路径。
+# 训练与查询必须共用同一套词表，否则词表维度会不一致，
+# 导致向量检索维度不匹配（index 侧 11433 维 vs query 侧 384 维哈希）。
+TFIDF_PATH = PROJECT_ROOT / "rag" / "data" / "vectors" / "tfidf.joblib"
+
+# 全局状态
 _transformer_model = None
 _model_attempted = False
 
@@ -83,7 +94,11 @@ def tokenize(text):
 
 
 def _try_load_transformer():
-    """尝试加载 sentence-transformers 模型（延迟加载）"""
+    """尝试加载 sentence-transformers 模型（延迟加载）
+
+    默认只读本地缓存（local_files_only），避免因联网 HEAD 检查超时而卡住；
+    需要下载模型时设置环境变量 NOVEL_HARNESS_ALLOW_MODEL_DOWNLOAD=1 放开。
+    """
     global _transformer_model, _model_attempted
     if _model_attempted:
         return
@@ -93,14 +108,14 @@ def _try_load_transformer():
         from sentence_transformers import SentenceTransformer
 
         model_name = "paraphrase-multilingual-MiniLM-L12-v2"
-        print(f"[embedder] 加载模型: {model_name} ...")
-        _transformer_model = SentenceTransformer(model_name)
-        dim = getattr(_transformer_model, 'get_sentence_embedding_dimension',
-                      _transformer_model.get_embedding_dimension)()
-        print(f"[embedder] 模型加载成功，输出维度: {dim}")
+        local_only = os.environ.get("NOVEL_HARNESS_ALLOW_MODEL_DOWNLOAD") != "1"
+        logger.info("加载模型: %s (local_files_only=%s) ...", model_name, local_only)
+        _transformer_model = SentenceTransformer(model_name, local_files_only=local_only)
+        dim = _transformer_model.get_sentence_embedding_dimension()
+        logger.info("模型加载成功，输出维度: %d", dim)
     except Exception as e:
-        print(f"[embedder] sentence-transformers 加载失败: {e}")
-        print("[embedder] 将使用 TF-IDF 统计嵌入回退方案")
+        logger.warning("sentence-transformers 不可用: %s", e)
+        logger.warning("将使用 TF-IDF 统计嵌入回退方案")
 
 
 def _transformer_embed(texts):
@@ -118,8 +133,13 @@ def _transformer_embed(texts):
 # ====== TF-IDF 统计嵌入器（后备方案）======
 
 
+def _custom_tokenizer(text):
+    """模块级分词器（必须定义在模块层，否则 TfidfVectorizer 无法 pickle 落盘）"""
+    return tokenize(text)
+
+
 def build_vocabulary(corpus, max_vocab=20000):
-    """从语料构建 TF-IDF 向量器
+    """从语料构建 TF-IDF 向量器，并持久化到磁盘
 
     参数：
         corpus: 字符串列表
@@ -129,12 +149,8 @@ def build_vocabulary(corpus, max_vocab=20000):
 
     from sklearn.feature_extraction.text import TfidfVectorizer
 
-    # 自定义分词器
-    def custom_tokenizer(text):
-        return tokenize(text)
-
     _tfidf_vectorizer = TfidfVectorizer(
-        tokenizer=custom_tokenizer,
+        tokenizer=_custom_tokenizer,
         lowercase=True,
         max_features=max_vocab,
         norm="l2",
@@ -145,9 +161,57 @@ def build_vocabulary(corpus, max_vocab=20000):
     _tfidf_built = True
 
     vocab_size = len(_tfidf_vectorizer.get_feature_names_out())
-    print(f"[embedder] TF-IDF 词表构建完成: {vocab_size} 个词, {len(corpus)} 篇文档")
+    logger.info("TF-IDF 词表构建完成: %d 个词, %d 篇文档", vocab_size, len(corpus))
+
+    save_vectorizer()
 
 
+def save_vectorizer():
+    """把已训练的 TF-IDF 向量器落盘，供查询进程复用"""
+    if _tfidf_vectorizer is None:
+        return False
+    try:
+        TFIDF_PATH.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(_tfidf_vectorizer, TFIDF_PATH)
+        logger.info("TF-IDF 词表已保存: %s", TFIDF_PATH.name)
+        return True
+    except Exception as e:
+        logger.error("TF-IDF 词表保存失败: %s", e)
+        return False
+
+
+def load_vectorizer():
+    """从磁盘加载已训练的 TF-IDF 向量器（查询进程用）
+
+    返回 True 表示加载成功；加载后 embed_text 会与索引端共用同一套词表。
+    """
+    global _tfidf_vectorizer, _tfidf_built
+    if _tfidf_built:
+        return True
+    if not TFIDF_PATH.exists():
+        return False
+    try:
+        _tfidf_vectorizer = joblib.load(TFIDF_PATH)
+        _tfidf_built = True
+        logger.info("已加载本地 TF-IDF 词表: %d 个词", len(_tfidf_vectorizer.get_feature_names_out()))
+        return True
+    except Exception as e:
+        logger.error("TF-IDF 词表加载失败: %s", e)
+        _tfidf_vectorizer = None
+        _tfidf_built = False
+        return False
+
+
+def clear_vectorizer():
+    """清空内存中的向量器与磁盘快照（重建索引时调用）"""
+    global _tfidf_vectorizer, _tfidf_built
+    _tfidf_vectorizer = None
+    _tfidf_built = False
+    try:
+        if TFIDF_PATH.exists():
+            TFIDF_PATH.unlink()
+    except OSError as e:
+        logger.warning("TF-IDF 词表清理失败: %s", e)
 def _tfidf_embed(texts):
     """TF-IDF 向量化"""
     if _tfidf_vectorizer is None:
@@ -166,13 +230,16 @@ def _tfidf_embed(texts):
 def embed_text(text):
     """为单段文本生成 embedding
 
-    优先使用 sentence-transformers，失败则回退到 TF-IDF。
+    降级顺序：
+    1. sentence-transformers（语义，384 维）
+    2. TF-IDF 向量器（内存中已训练 / 从磁盘加载，维度与索引端一致）
+    3. 哈希嵌入（最后防线，仅在索引端为语义模型时可用）
 
     参数：
         text: 待嵌入文本
 
     返回：
-        384 维向量
+        与索引端一致的维度的向量
     """
     if not _model_attempted:
         _try_load_transformer()
@@ -181,7 +248,11 @@ def embed_text(text):
         try:
             return _transformer_embed(text)[0]
         except Exception as e:
-            print(f"[embedder] Transformer 嵌入失败: {e}，回退到 TF-IDF")
+            logger.warning("Transformer 嵌入失败: %s，回退到 TF-IDF", e)
+
+    # 查询进程：尝试加载索引端落盘的同一套词表
+    if not _tfidf_built:
+        load_vectorizer()
 
     if _tfidf_built and _tfidf_vectorizer is not None:
         return _tfidf_embed(text)[0]
@@ -201,7 +272,10 @@ def embed_batch(texts):
         try:
             return _transformer_embed(texts)
         except Exception as e:
-            print(f"[embedder] Transformer 批量嵌入失败: {e}，回退到 TF-IDF")
+            logger.warning("Transformer 批量嵌入失败: %s，回退到 TF-IDF", e)
+
+    if not _tfidf_built:
+        load_vectorizer()
 
     if _tfidf_built and _tfidf_vectorizer is not None:
         return _tfidf_embed(texts)

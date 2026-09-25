@@ -1,22 +1,28 @@
 """
 retriever.py - 混合检索器。
 
-组合 SQLite FTS、可选向量检索、轻量重排和 source_type 权重，
+组合 FTS5 + BM25 + 向量检索 + CrossEncoder 重排，
 输出最终 top-k chunks。
 """
 
+from .logger import get_logger
+from . import bm25_retriever
+from . import reranker as reranker_mod
 from . import router as router_mod
 from .embedder import embed_text
-from .storage import sqlite_store
-from .storage import vector_store
+from .storage import sqlite_store, vector_store
+
+logger = get_logger("retriever")
 
 SOURCE_WEIGHTS = {"rule": 1.0, "knowledge": 0.9, "reference": 0.8, "project": 0.6}
+_BM25_WEIGHT = 0.25
+_FTS_WEIGHT = 0.20
+_VEC_WEIGHT = 0.30
+_TASK_WEIGHT = 0.25
 
 
-def hybrid_retrieve(query, task_type=None, top_k=5, fts_n=15, vec_n=15):
-    """执行混合检索，并返回重排后的 top-k chunks。"""
+def hybrid_retrieve(query, task_type=None, top_k=5, fts_n=30, vec_n=30, bm25_n=30, use_rerank=True):
     import time
-
     start_time = time.time()
     query_lower = query.lower()
 
@@ -26,6 +32,53 @@ def hybrid_retrieve(query, task_type=None, top_k=5, fts_n=15, vec_n=15):
         route_result = router_mod.route_query(query)
     task_route = route_result
 
+    fts_results = _retrieve_fts(query, task_route, fts_n)
+    bm25_results = bm25_retriever.bm25_search(query, bm25_n) if use_rerank else []
+    vec_results = _retrieve_vector(query, vec_n)
+
+    merged = _merge_results(fts_results, bm25_results, vec_results, query_lower, task_route)
+
+    reranked = merged
+    if use_rerank and len(merged) > 1:
+        reranked = reranker_mod.rerank(query, merged, top_n=top_k * 2)
+
+    reranked.sort(key=lambda x: x["score"], reverse=True)
+    final = reranked[:top_k]
+
+    final_results = []
+    for r in final:
+        text = r.get("text", "") or r.get("snippet", "") or ""
+        final_results.append({
+            "chunk_id": r["chunk_id"],
+            "title": r.get("title", ""),
+            "score": r.get("score", 0),
+            "ce_score": r.get("ce_score"),
+            "reason": _build_reason(r),
+            "snippet": text[:200] + ("..." if len(text) > 200 else ""),
+            "source_path": r.get("source_path", ""),
+            "source_type": r.get("source_type", ""),
+            "category": r.get("category", ""),
+            "tags": r.get("tags", []),
+            "priority": r.get("priority", 3),
+        })
+
+    elapsed = time.time() - start_time
+    return {
+        "results": final_results,
+        "meta": {
+            "total_candidates": len(merged),
+            "fts_count": len(fts_results),
+            "bm25_count": len(bm25_results),
+            "vector_count": len(vec_results),
+            "elapsed_ms": round(elapsed * 1000),
+            "task_type": route_result.get("task_type"),
+            "confidence": route_result.get("confidence", 0),
+            "rerank_used": use_rerank and len(merged) > 1,
+        },
+    }
+
+
+def _retrieve_fts(query, task_route, fts_n):
     fts_results = []
     categories = task_route.get("categories", [])
     stages = task_route.get("stages", [])
@@ -34,150 +87,165 @@ def hybrid_retrieve(query, task_type=None, top_k=5, fts_n=15, vec_n=15):
         filtered = sqlite_store.filter_chunks(categories=categories, stages=stages, top_n=fts_n)
         for row in filtered:
             text = (row.get("title", "") + " " + row.get("text", "")).lower()
-            terms = [term for term in query_lower.split() if term]
+            terms = [t for t in query.lower().split() if t]
             score = 0
             for term in terms:
                 if term in text:
                     score -= 1
-
-            title_text = row.get("title", "").lower()
-            if any(term in title_text for term in terms):
+            if row.get("title", "").lower() and any(term in row["title"].lower() for term in terms):
                 score -= 3
-
             row["fts_score"] = score if score < 0 else -0.1
             fts_results.append(row)
-
         fts_results = [r for r in fts_results if r.get("fts_score", 0) < 0]
 
     if not fts_results:
         fts_results = sqlite_store.fts_search(query, fts_n)
+        for r in fts_results:
+            r["fts_score"] = r.get("fts_score", 0)
+    return fts_results
 
-    fts_map = {row["chunk_id"]: row for row in fts_results}
 
-    vec_results = []
+def _retrieve_vector(query, vec_n):
     try:
         query_vector = embed_text(query)
-        vec_results = vector_store.vector_search(query_vector, vec_n)
+        return vector_store.vector_search(query_vector, vec_n)
     except Exception as exc:
-        print(f"[retriever] 向量检索失败: {exc}")
+        logger.error("向量检索失败: %s", exc)
+        return []
 
-    vec_map = {row["chunk_id"]: row["score"] for row in vec_results}
 
+def _merge_results(fts_results, bm25_results, vec_results, query_lower, task_route):
     candidates = {}
-    for chunk_id, info in fts_map.items():
-        candidates[chunk_id] = {
-            "chunk_id": chunk_id,
-            "row": info,
-            "fts_score": info.get("fts_score"),
-            "vec_score": vec_map.get(chunk_id),
+
+    for r in fts_results:
+        cid = r["chunk_id"]
+        candidates[cid] = {
+            "chunk_id": cid,
+            "title": r.get("title", ""),
+            "text": r.get("text", ""),
+            "fts_score": r.get("fts_score", 0),
+            "bm25_score": None,
+            "vec_score": None,
+            "source_path": r.get("source_path", ""),
+            "source_type": r.get("source_type", ""),
+            "category": r.get("category", ""),
+            "tags": r.get("tags", []),
+            "priority": r.get("priority", 3),
         }
 
-    for row in vec_results:
-        if row["chunk_id"] in candidates:
-            continue
-
-        chunk_data = sqlite_store.get_chunk_by_id(row["chunk_id"])
-        if chunk_data:
-            candidates[row["chunk_id"]] = {
-                "chunk_id": row["chunk_id"],
-                "row": chunk_data,
+    for r in bm25_results:
+        cid = r["chunk_id"]
+        if cid in candidates:
+            candidates[cid]["bm25_score"] = r["score"]
+        else:
+            candidates[cid] = {
+                "chunk_id": cid,
+                "title": r.get("title", ""),
+                "text": r.get("text", ""),
                 "fts_score": None,
-                "vec_score": row["score"],
+                "bm25_score": r["score"],
+                "vec_score": None,
+                "source_path": r.get("source_path", ""),
+                "source_type": r.get("source_type", ""),
+                "category": r.get("category", ""),
+                "tags": r.get("tags", []),
+                "priority": r.get("priority", 3),
             }
 
-    reranked = []
-    for chunk_id, candidate in candidates.items():
-        row = candidate["row"]
-        score = _rerank(row, query_lower, task_route, candidate["fts_score"], candidate["vec_score"])
-        reason = _build_reason(row, candidate["fts_score"], candidate["vec_score"], task_route)
-        text = row.get("text", "")
-        reranked.append({
-            "chunk_id": chunk_id,
-            "title": row.get("title", ""),
-            "score": score,
-            "reason": reason,
-            "snippet": text[:200] + ("..." if len(text) > 200 else ""),
-            "source_path": row.get("source_path", ""),
-            "source_type": row.get("source_type", ""),
-            "category": row.get("category", ""),
-            "tags": row.get("tags", []),
-            "priority": row.get("priority", 3),
-        })
+    vec_map = {r["chunk_id"]: r["score"] for r in vec_results}
+    for cid, score in vec_map.items():
+        if cid in candidates:
+            candidates[cid]["vec_score"] = score
+        else:
+            chunk_data = sqlite_store.get_chunk_by_id(cid)
+            if chunk_data:
+                candidates[cid] = {
+                    "chunk_id": cid,
+                    "title": chunk_data.get("title", ""),
+                    "text": chunk_data.get("text", ""),
+                    "fts_score": None,
+                    "bm25_score": None,
+                    "vec_score": score,
+                    "source_path": chunk_data.get("source_path", ""),
+                    "source_type": chunk_data.get("source_type", ""),
+                    "category": chunk_data.get("category", ""),
+                    "tags": chunk_data.get("tags", []),
+                    "priority": chunk_data.get("priority", 3),
+                }
 
-    reranked.sort(key=lambda x: x["score"], reverse=True)
-    elapsed = time.time() - start_time
+    for cid, cand in candidates.items():
+        cand["score"] = _compute_score(cand, query_lower, task_route)
 
-    return {
-        "results": reranked[:top_k],
-        "meta": {
-            "total_candidates": len(candidates),
-            "fts_count": len(fts_results),
-            "vector_count": len(vec_results),
-            "elapsed_ms": round(elapsed * 1000),
-            "task_type": route_result.get("task_type"),
-            "confidence": route_result.get("confidence", 0),
-        },
-    }
+    return list(candidates.values())
 
 
-def _rerank(row, query_lower, task_route, fts_score, vector_score):
-    if isinstance(fts_score, (int, float)) and fts_score < 0:
-        fts_norm = min(1.0, max(0.0, -fts_score / 15))
-    else:
-        fts_norm = 0.0
+def _compute_score(cand, query_lower, task_route):
+    fts = cand.get("fts_score")
+    bm25 = cand.get("bm25_score")
+    vec = cand.get("vec_score")
 
-    if isinstance(vector_score, (int, float)):
-        vec_norm = min(1.0, max(0.0, vector_score))
-    else:
-        vec_norm = 0.2
+    fts_norm = 0.0
+    if isinstance(fts, (int, float)) and fts is not None and fts < 0:
+        fts_norm = min(1.0, max(0.0, -fts / 30))
 
-    task_match = 0.0
-    if task_route:
-        categories = task_route.get("categories", [])
-        if categories and row.get("category") in categories:
-            task_match += 0.5
+    bm25_norm = 0.0
+    if isinstance(bm25, (int, float)) and bm25 is not None and bm25 > 0:
+        bm25_norm = min(1.0, bm25 / 15)
 
-        stages = task_route.get("stages", [])
-        if row.get("stage") and any(stage in str(row["stage"]) for stage in stages):
-            task_match += 0.3
+    vec_norm = 0.0
+    if isinstance(vec, (int, float)) and vec is not None:
+        vec_norm = min(1.0, max(0.0, vec))
 
-        description = (task_route.get("description", "") or "").lower()
-        query_terms = [term for term in query_lower.split() if len(term) > 1]
-        import re
-
-        desc_terms = re.split(r"[：:、，。\s]", description)
-        overlap = sum(1 for qt in query_terms if any(qt in rt for rt in desc_terms))
-        task_match += min(overlap * 0.05, 0.2)
-
-    task_match = min(1.0, task_match)
-
-    priority_weight = (6 - (row.get("priority", 3) or 3)) / 5
-    source_weight = SOURCE_WEIGHTS.get(row.get("source_type"), 0.5)
+    task_match = _compute_task_match(cand, task_route, query_lower)
+    priority_weight = (6 - (cand.get("priority", 3) or 3)) / 5
+    source_weight = SOURCE_WEIGHTS.get(cand.get("source_type"), 0.5)
 
     return round(
-        vec_norm * 0.35
-        + fts_norm * 0.15
-        + task_match * 0.30
-        + priority_weight * 0.12
-        + source_weight * 0.08,
+        vec_norm * _VEC_WEIGHT
+        + fts_norm * _FTS_WEIGHT
+        + bm25_norm * _BM25_WEIGHT
+        + task_match * _TASK_WEIGHT
+        + priority_weight * 0.08
+        + source_weight * 0.04,
         4,
     )
 
 
-def _build_reason(row, fts_score, vector_score, task_route):
+def _compute_task_match(cand, task_route, query_lower):
+    if not task_route:
+        return 0.0
+    match = 0.0
+    categories = task_route.get("categories", [])
+    if categories and cand.get("category") in categories:
+        match += 0.5
+    stages = task_route.get("stages", [])
+    if cand.get("stage") and any(stage in str(cand["stage"]) for stage in stages):
+        match += 0.3
+    return min(1.0, match)
+
+
+def _build_reason(cand):
     parts = []
-    if isinstance(fts_score, (int, float)) and fts_score < 0:
+    fts = cand.get("fts_score")
+    bm25 = cand.get("bm25_score")
+    vec = cand.get("vec_score")
+
+    if isinstance(fts, (int, float)) and fts is not None and fts < 0:
         parts.append("关键词匹配")
-    if isinstance(vector_score, (int, float)) and vector_score > 0.3:
+    if isinstance(bm25, (int, float)) and bm25 is not None and bm25 > 0:
+        parts.append("BM25 稀疏检索")
+    if isinstance(vec, (int, float)) and vec is not None and vec > 0.3:
         parts.append("语义接近")
-    if task_route and row.get("category") in task_route.get("categories", []):
-        parts.append("任务类型命中")
-    if row.get("priority", 3) <= 2:
-        parts.append("高优先级")
-    if row.get("source_type") == "rule":
+    if cand.get("ce_score") is not None:
+        parts.append("CrossEncoder 重排")
+    if cand.get("category"):
+        parts.append(f"类型:{cand['category']}")
+    if cand.get("source_type") == "rule":
         parts.append("规则文档")
-    if row.get("source_type") == "knowledge":
+    if cand.get("source_type") == "knowledge":
         parts.append("知识包")
+    if cand.get("priority", 3) <= 2:
+        parts.append("高优先级")
     if not parts:
         parts.append("综合匹配")
     return " + ".join(parts)

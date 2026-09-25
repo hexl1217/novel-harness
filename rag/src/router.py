@@ -10,7 +10,11 @@ router.py — 任务路由器
 import json
 from pathlib import Path
 
+from .logger import get_logger
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+logger = get_logger("router")
 ROUTES_PATH = PROJECT_ROOT / "rag" / "config" / "task-routes.json"
 
 
@@ -21,7 +25,7 @@ def _load_routes():
             data = json.load(f)
             return data.get("routes", {})
     except (OSError, json.JSONDecodeError) as e:
-        print(f"[router] 加载路由配置失败: {e}")
+        logger.error("加载路由配置失败: %s", e)
         return {}
 
 

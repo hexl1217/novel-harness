@@ -46,6 +46,26 @@
       "label": "项目模板",
       "description": "项目级别模板与题材边界",
       "sources": ["game-datafied", "project-templates", "knowledge.market"]
+    },
+    "common.topic": {
+      "label": "题材参考",
+      "description": "主流题材包：玄幻仙侠、都市现实、悬疑刑侦、情感女频、末世求生、历史权谋、科幻赛博、游戏电竞、恐怖规则怪谈、短剧改编、同人、年代世情等",
+      "sources": ["knowledge.remote"]
+    },
+    "common.setting": {
+      "label": "设定设计",
+      "description": "世界观、系统金手指、规则机制、组织势力与资源设定",
+      "sources": ["knowledge.remote"]
+    },
+    "common.writing": {
+      "label": "写作方法",
+      "description": "大纲结构节奏、人物角色关系、场景动作战斗、设定与大纲框架、正文创作润色",
+      "sources": ["knowledge.remote"]
+    },
+    "common.workflow": {
+      "label": "流程与市场工具",
+      "description": "写作检查表、卡文救援、伏笔回收、创作流程 Agent、数据分析与商业化工具",
+      "sources": ["knowledge.remote"]
     }
   }
 }
