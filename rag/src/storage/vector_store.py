@@ -2,7 +2,8 @@
 vector_store.py — FAISS 向量存储层
 
 使用 FAISS IndexFlatIP（内积 = 余弦相似度，因为向量已 L2 归一化）。
-VECTOR_DIM = 384，与 sentence-transformers multilingual 模型对齐。
+索引维度由首条向量决定（transformer 嵌入为 384 维，TF-IDF 回退为词表大小），
+常量 VECTOR_DIM 只是「默认/预期」维度，从 embedder 单一真源导入。
 自动降级到 NumPy 暴力检索（FAISS 不可用时）。
 """
 
@@ -13,6 +14,10 @@ from pathlib import Path
 
 import numpy as np
 
+# VECTOR_DIM 只是「默认/预期」维度，真源在 embedder。
+# 用 `as VECTOR_DIM` 形式是有意的再导出：向量存储的调用方（含测试）
+# 都通过 vector_store.VECTOR_DIM 取维度。
+from ..embedder import VECTOR_DIM as VECTOR_DIM
 from ..logger import get_logger
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -22,7 +27,16 @@ VECTORS_DIR = PROJECT_ROOT / "rag" / "data" / "vectors"
 FAISS_INDEX_PATH = VECTORS_DIR / "faiss.index"
 META_PATH = VECTORS_DIR / "meta.pkl"
 
-VECTOR_DIM = 384
+# 对外接口（VECTOR_DIM 是再导出：真源在 embedder，调用方习惯从本模块取）
+__all__ = [
+    "VECTOR_DIM",
+    "cosine_similarity",
+    "insert_vectors",
+    "vector_search",
+    "get_vector_count",
+    "get_all_vectors",
+    "clear",
+]
 
 _faiss_mod = None
 _index = None
@@ -103,9 +117,11 @@ def _save_numpy_fallback():
     arr = None
     if _has_faiss() and hasattr(_index, 'ntotal') and _index.ntotal > 0:
         try:
+            # 用索引自身的维度 reshape，而不是 VECTOR_DIM 常量 ——
+            # TF-IDF 回退路径的维度是词表大小，硬编码 384 会 reshape 失败。
             arr = _faiss_mod.vector_to_array(
                 _index.reconstruct_n(0, _index.ntotal)
-            ).reshape(-1, VECTOR_DIM)
+            ).reshape(_index.ntotal, _index.d)
         except Exception:
             pass
     elif isinstance(_index, np.ndarray):

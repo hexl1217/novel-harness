@@ -13,7 +13,6 @@ embedder.py — 向量嵌入生成器
 """
 
 import os
-import re
 import joblib
 import numpy as np
 from pathlib import Path
@@ -28,6 +27,14 @@ logger = get_logger("embedder")
 # 训练与查询必须共用同一套词表，否则词表维度会不一致，
 # 导致向量检索维度不匹配（index 侧 11433 维 vs query 侧 384 维哈希）。
 TFIDF_PATH = PROJECT_ROOT / "rag" / "data" / "vectors" / "tfidf.joblib"
+
+# 向量维度：与 sentence-transformers 多语言模型
+# （paraphrase-multilingual-MiniLM-L12-v2）对齐，也是哈希回退嵌入的维度。
+# 这是该常量的唯一真源，vector_store 从这里导入。
+#
+# 注意：TF-IDF 路径产出的维度 = 词表大小（动态），与这里无关；
+# 索引端与查询端只要用同一套词表即可自洽。
+VECTOR_DIM = 384
 
 # 全局状态
 _transformer_model = None
@@ -72,14 +79,16 @@ def tokenize(text):
                 tokens.append(ch)
                 # 相邻双字词
                 if i + 1 < len(text) and "一" <= text[i + 1] <= "鿿":
-                    bigram = text[i : i + 2]
+                    bigram = text[i:i + 2]
                     if bigram not in _STOP_WORDS:
                         tokens.append(bigram)
             i += 1
         # 英文/数字
-        elif ch.isalnum():
+        elif ch.isascii() and ch.isalnum():
+            # 注意：不能只用 isalnum() —— 中文的 isalnum() 也是 True，
+            # 那样 "ai写作需要去ai味" 整串会被当成一个 ASCII 词吞掉。
             word = ""
-            while i < len(text) and text[i].isalnum():
+            while i < len(text) and text[i].isascii() and text[i].isalnum():
                 word += text[i]
                 i += 1
             if word and word not in _STOP_WORDS:
@@ -114,8 +123,18 @@ def _try_load_transformer():
         dim = _transformer_model.get_sentence_embedding_dimension()
         logger.info("模型加载成功，输出维度: %d", dim)
     except Exception as e:
-        logger.warning("sentence-transformers 不可用: %s", e)
-        logger.warning("将使用 TF-IDF 统计嵌入回退方案")
+        # 这是最容易踩的坑：模型解析失败会被静默降级到 TF-IDF，
+        # 而 TF-IDF 的向量维度 = 词表大小（默认上限 20000），不是 384 ——
+        # 索引能跑，但向量文件会从 ~14MB 涨到数百 MB，且失去语义检索能力。
+        # 所以这里把异常类型打出来，并给出可操作的下一步。
+        logger.warning(
+            "sentence-transformers 不可用（%s: %s），将使用 TF-IDF 统计嵌入回退方案；"
+            "本次索引的向量维度 = 词表大小（默认上限 20000），不是 384。"
+            "如需语义检索：确认模型权重已完整下载到 HF 缓存，"
+            "或设置 NOVEL_HARNESS_ALLOW_MODEL_DOWNLOAD=1 后重建索引。",
+            type(e).__name__,
+            e,
+        )
 
 
 def _transformer_embed(texts):
@@ -212,6 +231,8 @@ def clear_vectorizer():
             TFIDF_PATH.unlink()
     except OSError as e:
         logger.warning("TF-IDF 词表清理失败: %s", e)
+
+
 def _tfidf_embed(texts):
     """TF-IDF 向量化"""
     if _tfidf_vectorizer is None:
@@ -285,7 +306,7 @@ def embed_batch(texts):
 
 def _fallback_embed(text):
     """简单哈希嵌入（最后防线）"""
-    dim = 384
+    dim = VECTOR_DIM
     vector = np.zeros(dim)
     text = str(text)
     length = len(text) or 1

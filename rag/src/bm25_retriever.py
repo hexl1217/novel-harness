@@ -5,8 +5,6 @@ bm25_retriever.py — BM25 稀疏检索器
 对中文文本做智能分词后索引。
 """
 
-import math
-import re
 import threading
 from pathlib import Path
 
@@ -48,9 +46,11 @@ def tokenize(text: str) -> list[str]:
                     if bigram not in _STOP_WORDS:
                         tokens.append(bigram)
             i += 1
-        elif ch.isalnum():
+        elif ch.isascii() and ch.isalnum():
+            # 注意：不能只用 isalnum() —— 中文的 isalnum() 也是 True，
+            # 那样 "ai写作需要去ai味" 整串会被当成一个 ASCII 词吞掉。
             word = ""
-            while i < len(text) and text[i].isalnum():
+            while i < len(text) and text[i].isascii() and text[i].isalnum():
                 word += text[i]
                 i += 1
             if word and word not in _STOP_WORDS:
@@ -75,6 +75,40 @@ def build_index(chunks: list[dict]):
         _bm25 = BM25Okapi(_tokenized)
         _built = True
         logger.info("BM25 索引构建完成: %d 个文档", len(chunks))
+
+
+def ensure_index() -> bool:
+    """确保 BM25 索引可用（查询进程首次检索时从 SQLite 懒构建）。
+
+    BM25 索引只存在于进程内存、不落盘；而 build_index() 此前只在
+    indexer.build_full_index() 里被调用过。于是查询端（HTTP / MCP 服务）
+    进程内根本没有索引，bm25_search() 恒返回空 —— 这整条稀疏召回通道
+    会静默失效（retriever 里 _BM25_WEIGHT 权重照算不误，只是永远拿不到分）。
+
+    代价落在首次检索上；服务启动的 warmup 本来就会跑一次检索，
+    因此实际相当于把重建放在启动阶段完成。
+
+    返回 True 表示索引可用。
+    """
+    if _built and _bm25 is not None:
+        return True
+    # rank_bm25 缺失时 build_index 会把 _built 置 True 但 _bm25 仍为 None，
+    # 这种情况下不再反复尝试。
+    if _built:
+        return False
+
+    try:
+        from .storage import sqlite_store  # 延迟导入，避免 storage 与本模块循环依赖
+        chunks = sqlite_store.get_all_chunks()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("BM25 懒加载失败: %s", exc)
+        return False
+
+    if chunks:
+        logger.info("BM25 索引未构建，从 SQLite 懒加载 %d 个 chunk", len(chunks))
+        build_index(chunks)
+
+    return _built and _bm25 is not None
 
 
 def bm25_search(query: str, top_n: int = 15) -> list[dict]:

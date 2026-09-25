@@ -52,7 +52,6 @@ def route_query(query):
         }
 
     query_lower = query.lower()
-    query_terms = set(query_lower.split())
 
     best_match = None
     best_score = -1
@@ -70,7 +69,6 @@ def route_query(query):
             kw_lower = kw.lower()
             # 完整关键词匹配
             if kw_lower in query_lower:
-                kw_score = len(kw_lower) / max(len(qt) for qt in query_terms) if query_terms else 1
                 score += len(kw_lower) * 2
                 matched.append(kw)
             # 部分匹配（关键词的每个字都在查询中）

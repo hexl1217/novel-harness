@@ -33,7 +33,12 @@ def hybrid_retrieve(query, task_type=None, top_k=5, fts_n=30, vec_n=30, bm25_n=3
     task_route = route_result
 
     fts_results = _retrieve_fts(query, task_route, fts_n)
-    bm25_results = bm25_retriever.bm25_search(query, bm25_n) if use_rerank else []
+    bm25_results = []
+    if use_rerank:
+        # BM25 索引只在进程内存在，索引构建脚本之外没人建过它 ——
+        # 这里懒加载，否则 bm25_search 恒返回空（整条通道静默失效）。
+        bm25_retriever.ensure_index()
+        bm25_results = bm25_retriever.bm25_search(query, bm25_n)
     vec_results = _retrieve_vector(query, vec_n)
 
     merged = _merge_results(fts_results, bm25_results, vec_results, query_lower, task_route)

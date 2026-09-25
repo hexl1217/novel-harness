@@ -37,8 +37,11 @@ logger = get_logger("server")
 class RetrieveRequest(BaseModel):
     """混合检索请求"""
     query: str = Field(..., description="检索查询文本", examples=["去AI味修改指南"])
-    task_type: str | None = Field(None, description="任务类型（可选，自动路由）",
-                                   examples=["humanization"])
+    task_type: str | None = Field(
+        None,
+        description="任务类型（可选，自动路由）",
+        examples=["humanization"],
+    )
     project_hint: str | None = Field(None, description="项目提示（保留字段）")
     top_k: int = Field(5, description="返回结果数量", ge=1, le=20)
 

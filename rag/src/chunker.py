@@ -10,7 +10,6 @@ chunker.py — Markdown 文档分块器
 """
 
 import re
-from pathlib import Path
 
 from .logger import get_logger
 
@@ -84,7 +83,7 @@ def _split_long_section(text, max_chars=900):
     current = []
 
     for line in lines:
-        current_len = sum(len(l) for l in current) + len(current) - 1  # 换行符数量
+        current_len = sum(len(item) for item in current) + len(current) - 1  # 换行符数量
 
         if current_len + len(line) > max_chars and current:
             # 在列表项处分割

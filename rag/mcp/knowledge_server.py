@@ -40,7 +40,10 @@ except ImportError:
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SYNC_SCRIPT = PROJECT_ROOT / "rag" / "scripts" / "sync_packs.py"
-PACK_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,48}$")
+# 小写字母/数字 + 中间连字符，且首尾必须是字母或数字（不能以连字符开头或结尾）。
+# 旧写法 ^[a-z0-9][a-z0-9-]{0,48}$ 会接受 "trailing-" 这种畸形 id。
+PACK_ID_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,47}[a-z0-9])?$")
+PACK_ID_HINT = "pack_id 只能由小写字母、数字和连字符组成，长度不超过 49，且不能以连字符开头或结尾"
 
 
 def _manifest_arg(arguments: dict[str, Any]) -> list[str]:
@@ -70,7 +73,7 @@ def _run_sync(args: list[str]) -> dict[str, Any]:
 def _require_pack_id(arguments: dict[str, Any]) -> str:
     pack_id = str(arguments.get("pack_id", "")).strip()
     if not PACK_ID_RE.match(pack_id):
-        raise ValueError("pack_id must match ^[a-z0-9][a-z0-9-]{0,48}$")
+        raise ValueError(PACK_ID_HINT)
     return pack_id
 
 
