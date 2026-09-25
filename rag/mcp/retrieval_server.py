@@ -2,7 +2,7 @@
 retrieval_server.py — MCP stdio 服务：把 novel-harness 的 RAG 检索能力暴露给 MCP 客户端
 
 工具：
-  search_knowledge  — 混合检索（FTS + 向量 + BM25 + 重排），返回可直接注入 Agent 的上下文包
+  search_knowledge  — 混合检索（FTS5 + BM25 + 向量），返回可直接注入 Agent 的上下文包
   route_knowledge   — 只做任务路由分析，不检索
   rag_index_stats   — 查看索引统计
 
@@ -107,7 +107,7 @@ def _tool_defs() -> list[dict[str, Any]]:
         {
             "name": "search_knowledge",
             "description": (
-                "在 novel-harness 本地知识库中做混合检索（关键词 + 语义 + BM25 + 重排）。"
+                "在 novel-harness 本地知识库中做混合检索（关键词 + 语义 + BM25）。"
                 "适用：去 AI 味规则、语病诊断、大纲评估、写前清单、题材边界、节奏检查等。"
                 "返回可直接注入 Agent 上下文的文本。"
             ),

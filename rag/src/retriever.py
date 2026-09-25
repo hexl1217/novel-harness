@@ -1,13 +1,39 @@
 """
 retriever.py - 混合检索器。
 
-组合 FTS5 + BM25 + 向量检索 + CrossEncoder 重排，
-输出最终 top-k chunks。
+组合 FTS5 + BM25 + 向量检索，按加权公式打分，输出最终 top-k chunks。
+
+**关于重排（2026-09-26 重做）**
+
+本模块原先调用 ``reranker.rerank(..., top_n=2*top_k)``。该函数有两条路径：
+CrossEncoder（英文 STS 模型 ``cross-encoder/stsb-distilroberta-base``）与「词重叠」
+降级路径。受控实验（同索引、同查询集，唯一变量是模型是否加载）后的结论是
+**只删 CrossEncoder，保留词重叠初筛**（见 `_screen_by_query_overlap`）：
+
+    CrossEncoder 生效    Recall@5 = 0.700    单次检索 ~8.4 s
+    词重叠初筛          Recall@5 = 1.000    单次检索 ~82 ms
+
+删 CrossEncoder 的三条独立理由：
+
+1. 它是**英文 STS 模型**，给中文 query/段落对打分；
+2. 它把 47~62 个候选**截断**到 ``top_n``，而这个 top_n 只有 ``2*top_k``；
+3. 截断之后又按 ``score`` 排了一次，而它只写 ``ce_score`` ——
+   **模型给出的顺序被整条丢弃，它实际只充当了「截断器」**。
+
+第 3 点意味着「修排序」救不了它：让模型排序真正生效只会更差（0.700 就是它的成绩）。
+
+而「词重叠」那条路径**不能陪着一起删**。它名义上是降级分支，实际承担着初筛职责：
+单独去掉它，Recall@5 会从 1.000 掉到 0.900（query「大纲质量评估」的正确答案落到
+第 6 名，与第 5 名只差 0.0036）。所以它被提升为唯一实现，并移入本模块。
+
+若将来要重新引入模型精排，必须**同时**满足两条，缺一不可：
+
+- 换成中文 reranker（如 ``BAAI/bge-reranker-base``）；
+- 让最终排序真正使用重排分数（``sort(key=重排分)``），而不是当作截断器。
 """
 
 from .logger import get_logger
 from . import bm25_retriever
-from . import reranker as reranker_mod
 from . import router as router_mod
 from .embedder import embed_text
 from .storage import sqlite_store, vector_store
@@ -21,7 +47,7 @@ _VEC_WEIGHT = 0.30
 _TASK_WEIGHT = 0.25
 
 
-def hybrid_retrieve(query, task_type=None, top_k=5, fts_n=30, vec_n=30, bm25_n=30, use_rerank=True):
+def hybrid_retrieve(query, task_type=None, top_k=5, fts_n=30, vec_n=30, bm25_n=30):
     import time
     start_time = time.time()
     query_lower = query.lower()
@@ -33,22 +59,20 @@ def hybrid_retrieve(query, task_type=None, top_k=5, fts_n=30, vec_n=30, bm25_n=3
     task_route = route_result
 
     fts_results = _retrieve_fts(query, task_route, fts_n)
-    bm25_results = []
-    if use_rerank:
-        # BM25 索引只在进程内存在，索引构建脚本之外没人建过它 ——
-        # 这里懒加载，否则 bm25_search 恒返回空（整条通道静默失效）。
-        bm25_retriever.ensure_index()
-        bm25_results = bm25_retriever.bm25_search(query, bm25_n)
+    # BM25 索引只在进程内存在，索引构建脚本之外没人建过它 ——
+    # 这里懒加载，否则 bm25_search 恒返回空（整条通道静默失效）。
+    #
+    # 历史 bug：这两行曾写在 `if use_rerank:` 里，于是「关掉重排」会连带静默
+    # 关掉整条 BM25 召回 —— 当时那条 `use_rerank=False` 的用例，实际测的是
+    # 「关掉 BM25」而不是「不许重排」。BM25 与重排无关，必须无条件执行。
+    bm25_retriever.ensure_index()
+    bm25_results = bm25_retriever.bm25_search(query, bm25_n)
     vec_results = _retrieve_vector(query, vec_n)
 
     merged = _merge_results(fts_results, bm25_results, vec_results, query_lower, task_route)
-
-    reranked = merged
-    if use_rerank and len(merged) > 1:
-        reranked = reranker_mod.rerank(query, merged, top_n=top_k * 2)
-
-    reranked.sort(key=lambda x: x["score"], reverse=True)
-    final = reranked[:top_k]
+    merged = _screen_by_query_overlap(merged, query_lower, top_n=top_k * 2)
+    merged.sort(key=lambda x: x["score"], reverse=True)
+    final = merged[:top_k]
 
     final_results = []
     for r in final:
@@ -57,7 +81,6 @@ def hybrid_retrieve(query, task_type=None, top_k=5, fts_n=30, vec_n=30, bm25_n=3
             "chunk_id": r["chunk_id"],
             "title": r.get("title", ""),
             "score": r.get("score", 0),
-            "ce_score": r.get("ce_score"),
             "reason": _build_reason(r),
             "snippet": text[:200] + ("..." if len(text) > 200 else ""),
             "source_path": r.get("source_path", ""),
@@ -78,7 +101,6 @@ def hybrid_retrieve(query, task_type=None, top_k=5, fts_n=30, vec_n=30, bm25_n=3
             "elapsed_ms": round(elapsed * 1000),
             "task_type": route_result.get("task_type"),
             "confidence": route_result.get("confidence", 0),
-            "rerank_used": use_rerank and len(merged) > 1,
         },
     }
 
@@ -185,6 +207,42 @@ def _merge_results(fts_results, bm25_results, vec_results, query_lower, task_rou
     return list(candidates.values())
 
 
+def _screen_by_query_overlap(candidates, query_lower, top_n):
+    """初筛：用「原分数 + 查询词重叠」挑出最靠前的 top_n 个候选。
+
+    这一步**不是精排** —— 最终顺序仍由 ``score`` 决定（调用方接着
+    ``sort(key=score)`` 再取前 k）。它的作用是保证「标题/正文真正含查询词」
+    的候选不会被纯语义分挤到后面。
+
+    为什么需要它：中文查询经 ``str.split()`` 通常只得到一个整词
+    （如「大纲质量评估」），于是 ``t in text`` 退化为**子串匹配** ——
+    「这段就是讲这个的」的强信号。它零依赖、不加载任何模型。
+
+    2026-09-26 实测（query「大纲质量评估」，索引 983 文档 / 8750 chunks）：
+    去掉这一步后正确答案落到第 6 名（score 0.8002，与第 5 名 0.8038 只差
+    0.0036），该查询未命中，Recall@5 由 1.000 降到 0.900；保留则回到 1.000。
+
+    历史背景：这一逻辑原先藏在 ``reranker._rerank_score_based`` 里，作为
+    CrossEncoder 不可用时的「降级路径」。同期核查发现 CrossEncoder
+    （英文 STS 模型 ``stsb-distilroberta-base``）才是真正有害的那半 ——
+    它使 Recall@5 掉到 0.700。所以移除的是 CrossEncoder，保留的是这里。
+    """
+    if len(candidates) <= 1:
+        return candidates
+
+    query_terms = set(query_lower.split())
+    for c in candidates:
+        text = ((c.get("text", "") or "") + " " + (c.get("title", "") or "")).lower()
+        overlap = sum(1 for t in query_terms if t in text) / max(len(query_terms), 1)
+        base = c.get("score", 0)
+        if not isinstance(base, (int, float)):
+            base = 0.0
+        c["overlap_score"] = base * 0.7 + overlap * 0.3
+
+    ranked = sorted(candidates, key=lambda x: x.get("overlap_score", 0), reverse=True)
+    return ranked[:top_n]
+
+
 def _compute_score(cand, query_lower, task_route):
     fts = cand.get("fts_score")
     bm25 = cand.get("bm25_score")
@@ -242,8 +300,6 @@ def _build_reason(cand):
         parts.append("BM25 稀疏检索")
     if isinstance(vec, (int, float)) and vec is not None and vec > 0.3:
         parts.append("语义接近")
-    if cand.get("ce_score") is not None:
-        parts.append("CrossEncoder 重排")
     if cand.get("category"):
         parts.append(f"类型:{cand['category']}")
     if cand.get("source_type") == "rule":

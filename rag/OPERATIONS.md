@@ -55,7 +55,7 @@ Agent 请求
        │
        ▼
 ┌──────────────┐
-│  轻量重排器    │  ← vec*0.35 + fts*0.15 + taskMatch*0.30 + priority*0.12 + sourceType*0.08
+│  加权打分器    │  ← vec*0.30 + fts*0.20 + bm25*0.25 + taskMatch*0.25 + priority*0.08 + sourceType*0.04
 └──────┬───────┘
        │
        ▼
@@ -71,7 +71,10 @@ Agent 请求
 3. 三路召回：FTS5 全文检索、BM25 稀疏检索、向量检索
    （categories / stages 作为**先验加权**参与打分，而不是硬过滤候选——
    硬过滤会让候选集与查询无关）
-4. 合并候选集，用加权公式重排，再交 CrossEncoder 重排
+4. 合并候选集，先按「分数 + 查询词重叠」初筛出 2×top_k 个，再按加权公式排序
+   （初筛之后曾接一个英文 CrossEncoder 精排，2026-09-26 实测有害后移除；
+   词重叠初筛保留 —— 去掉它 Recall@5 会从 1.000 掉到 0.900。
+   详见 `rag/src/retriever.py` 模块注释）
 5. 构建 Context Pack（结构化 JSON + 纯文本）
 6. 返回给 Agent 做 prompt 注入
 
@@ -640,7 +643,7 @@ text = context_pack_to_text(pack)
 | `rag/src/chunker.py` | 按 heading 分割文档为语义块（300-900 字），检测 chunk_type |
 | `rag/src/embedder.py` | 三层嵌入引擎：sentence-transformers → TF-IDF → hash |
 | `rag/src/router.py` | 关键词重叠度评分 → 确定最佳 task_type |
-| `rag/src/retriever.py` | 混合检索（FTS + 向量）+ 加权重排 |
+| `rag/src/retriever.py` | 混合检索（FTS5 + BM25 + 向量）+ 加权打分排序 |
 | `rag/src/context_pack.py` | 构建标准化的 Context Pack（JSON + 纯文本） |
 | `rag/src/indexer.py` | 编排完整索引构建流程（7 步） |
 | `rag/src/server.py` | FastAPI 服务（6 个端点） |

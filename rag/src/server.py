@@ -69,7 +69,6 @@ class RetrieveMeta(BaseModel):
     elapsed_ms: int
     task_type: str | None
     confidence: float
-    rerank_used: bool
 
 
 class RetrieveContext(BaseModel):
@@ -155,7 +154,7 @@ app = FastAPI(
 
 **核心能力：**
 - 三路混合检索（FTS5 + BM25 + FAISS 向量）
-- CrossEncoder 精排
+- 查询词重叠初筛 + 加权打分排序（英文 CrossEncoder 精排已移除，见 retriever.py）
 - 任务路由（7 种写作场景自动识别）
 - 可注入 Prompt 的上下文包输出
 

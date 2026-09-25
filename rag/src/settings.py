@@ -57,12 +57,6 @@ EMBEDDING_MODEL: str = _env(
     "paraphrase-multilingual-MiniLM-L12-v2",
 )
 
-# 重排序模型
-RERANKER_MODEL: str = _env(
-    "RERANKER_MODEL",
-    "cross-encoder/stsb-distilroberta-base",
-)
-
 # 检索参数
 RETRIEVE_TOP_K: int = int(_env("RETRIEVE_TOP_K", "5"))
 RETRIEVE_FTS_N: int = int(_env("RETRIEVE_FTS_N", "30"))

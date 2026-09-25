@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from rag.src import bm25_retriever
-from rag.src.retriever import _retrieve_fts, hybrid_retrieve
+from rag.src.retriever import _retrieve_fts, _screen_by_query_overlap, hybrid_retrieve
 from rag.src.storage import sqlite_store, vector_store
 
 
@@ -101,9 +101,45 @@ class TestHybridRetriever:
         assert "fts_count" in meta
         assert "vector_count" in meta
 
-    def test_retrieve_disallow_rerank(self):
-        result = hybrid_retrieve(query="大纲", top_k=3, use_rerank=False)
-        assert len(result["results"]) > 0
+    def test_bm25_channel_is_always_on(self, monkeypatch):
+        """回归：BM25 召回不得挂在任何开关下面。
+
+        历史 bug：``bm25_retriever.ensure_index()`` + ``bm25_search`` 曾写在
+        ``if use_rerank:`` 里。于是当时那条 ``use_rerank=False`` 的用例
+        （名为「不许重排」）实际测的是「关掉整条 BM25 召回」—— 名字与行为
+        完全相反。CrossEncoder 那条路径已于 2026-09-26 移除（实测有害）。
+
+        这里直接打桩断言「通道确实被调用」，**不**依赖语料能否召回：
+        ``rank_bm25`` 的 idf 是 ``log(N-freq+0.5) - log(freq+0.5)``，
+        本 fixture 只有 2 个文档，freq=1 时该式恰好为 0，所有分数被
+        ``bm25_search`` 里的 ``score <= 0`` 过滤掉。那是语料规模问题，
+        与通道是否接通无关（真实索引 8750 段，freq=1 时 idf ≈ 8.7）。
+        """
+        calls = []
+        real_search = bm25_retriever.bm25_search
+
+        def spy(query, top_n=15):
+            calls.append(query)
+            return real_search(query, top_n)
+
+        monkeypatch.setattr(bm25_retriever, "bm25_search", spy)
+        hybrid_retrieve(query="大纲", top_k=3)
+        assert calls, (
+            "hybrid_retrieve 没有调用 BM25 通道 —— 它可能又被挂到某个开关下面了"
+        )
+
+    def test_no_cross_encoder_leftovers(self):
+        """回归：检索主路径不得再出现 CrossEncoder 痕迹。
+
+        该模型被移除，是因为它把候选截断到 2*top_k 且模型给出的顺序被丢弃，
+        实测使 Recall@5 从 1.000 掉到 0.700。若将来有人重新接上，这里会先报警。
+        （注意：词重叠初筛是**保留**的，见 TestQueryOverlapScreen。）
+        """
+        result = hybrid_retrieve(query="大纲", top_k=3)
+        assert "rerank_used" not in result["meta"]
+        for r in result["results"]:
+            assert "ce_score" not in r
+            assert "overlap_score" not in r
 
 
 class TestFtsChannelIsQueryDriven:
@@ -152,3 +188,41 @@ class TestFtsChannelIsQueryDriven:
         route = {"categories": ["humanization"], "stages": []}
         rows = _retrieve_fts("zqxjv不存在的词kwmz", route, 10)
         assert rows, "无全文命中时应退回类别候选兜底"
+
+
+class TestQueryOverlapScreen:
+    """回归：含查询词的候选必须能被初筛保留。
+
+    这段逻辑原先藏在 ``reranker._rerank_score_based`` 里 —— 名字是
+    「CrossEncoder 不可用时的降级分支」，干的却是初筛的活。删 CrossEncoder
+    时若把它一起删掉，Recall@5 会从 1.000 掉到 0.900（实见于 query
+    「大纲质量评估」：正确答案落到第 6 名，与第 5 名只差 0.0036）。
+    """
+
+    def test_overlap_lifts_matching_candidate(self):
+        """含查询词的候选应被提进候选短名单。"""
+        candidates = [
+            {"chunk_id": "a", "title": "无关高分", "text": "完全无关的内容", "score": 0.90},
+            {"chunk_id": "b", "title": "无关中分", "text": "也是无关内容", "score": 0.88},
+            {"chunk_id": "c", "title": "大纲质量评估清单", "text": "评估对象与五维评估", "score": 0.80},
+        ]
+        # 前置条件：纯按 score 取前 2 时，含查询词的 c 确实进不去 ——
+        # 少了这个断言，本用例证明不了任何事。
+        naive = sorted(candidates, key=lambda x: x["score"], reverse=True)[:2]
+        assert "c" not in [x["chunk_id"] for x in naive]
+
+        kept = [c["chunk_id"] for c in _screen_by_query_overlap(candidates, "大纲质量评估", top_n=2)]
+        assert "c" in kept, "含查询词的候选应被初筛保留，否则会被纯 score 挤掉"
+
+    def test_shortlist_is_bounded(self):
+        """初筛结果不超过 top_n（它只是短名单，不是最终结果）。"""
+        candidates = [
+            {"chunk_id": f"c{i}", "title": f"标题{i}", "text": "正文", "score": 1.0 - i * 0.01}
+            for i in range(50)
+        ]
+        assert len(_screen_by_query_overlap(candidates, "标题", top_n=10)) == 10
+
+    def test_degenerate_inputs(self):
+        assert _screen_by_query_overlap([], "q", top_n=10) == []
+        one = [{"chunk_id": "a", "title": "t", "text": "x", "score": 0.5}]
+        assert _screen_by_query_overlap(one, "q", top_n=10) == one
