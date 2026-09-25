@@ -1,6 +1,6 @@
 {
-  "description": "知识源配置：控制哪些路径允许进入知识库",
-  "version": "1.0.0",
+  "description": "知识源配置：控制哪些路径允许进入知识库。由 rag/src/scanner.py 读取。",
+  "version": "1.1.0",
   "include_patterns": [
     ".harness/knowledge/included/**/*.md",
     ".harness/knowledge/remote/**/*.md",
@@ -9,19 +9,25 @@
     ".harness/skills/**/rules/*.md",
     ".harness/project-templates/*.md"
   ],
-  "exclude_patterns": [
-    "planning/**",
-    "legacy-skills/**",
-    ".harness/knowledge/user/**",
-    ".harness/agents/**",
-    ".harness/current-project.md",
-    ".harness/README.md",
-    ".harness/memory/**",
-    ".harness/cases/**",
-    ".harness/rules/**",
-    "node_modules/**",
-    "rag/**"
-  ],
+  "exclude": {
+    "_comment": "排除规则的三种语义，逐条生效（scanner._is_excluded）",
+    "path_prefixes": [
+      ".harness/rules/"
+    ],
+    "dir_segments": [
+      "planning",
+      "legacy-skills",
+      "agents",
+      "memory",
+      "cases",
+      "user",
+      "current-project",
+      "node_modules"
+    ],
+    "file_prefixes": [
+      "README"
+    ]
+  },
   "source_types": {
     "knowledge": ".harness/knowledge/**/*.md",
     "reference": ".harness/skills/**/references/*.md",

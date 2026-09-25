@@ -67,9 +67,11 @@ Agent 请求
 ### 数据流
 
 1. Agent 发送查询请求（可附带 task_type）
-2. 任务路由器自动识别查询意图，确定过滤条件
-3. 按 metadata 硬过滤 → FTS5 全文检索 → 向量语义检索
-4. 合并候选集，用加权公式重排
+2. 任务路由器自动识别查询意图，给出 categories / stages
+3. 三路召回：FTS5 全文检索、BM25 稀疏检索、向量检索
+   （categories / stages 作为**先验加权**参与打分，而不是硬过滤候选——
+   硬过滤会让候选集与查询无关）
+4. 合并候选集，用加权公式重排，再交 CrossEncoder 重排
 5. 构建 Context Pack（结构化 JSON + 纯文本）
 6. 返回给 Agent 做 prompt 注入
 
@@ -476,6 +478,14 @@ curl -X POST http://localhost:3456/explain-retrieval \
   - 重建索引时会先删除旧词表（`embedder.clear_vectorizer()`），避免新旧词表混用。
   - 若该文件缺失，查询端会退化为 384 维哈希嵌入，与 TF-IDF 索引维度不匹配，向量检索将被跳过（仅剩 FTS5/BM25）。此时重新执行一次索引构建即可恢复。
 
+> **能力边界（实测）**：TF-IDF 回退**不具备语义检索能力**——它本质仍是词袋，
+> 只是把「词面重叠」换成了加权计数。因此**用词不同但语义相同**的查询会落空。
+> 例：「这个大纲后面能不能展开」检索不到 `大纲质量评估清单`（后者正文里
+> 「展开」出现 0 次，用的是「可行性」），BM25 排第 45 名、FTS 60 条内零召回。
+> 这类查询只有真语义模型（`paraphrase-multilingual-MiniLM-L12-v2`，384 维）
+> 才能覆盖。判据设计时请避免把这种用例当成「检索退化」——见
+> `test/verify.py` 中 TA 查询的说明。
+
 ### 3. 哈希嵌入（最后防线）
 
 - **触发条件**: 前两者均不可用
@@ -641,7 +651,7 @@ text = context_pack_to_text(pack)
 
 | 路径 | 说明 |
 |------|------|
-| `rag/config/sources.json` | 知识源扫描范围（include/exclude） |
+| `rag/config/sources.json` | 知识源扫描范围。**由 `rag/src/scanner.py` 读取**（include_patterns / exclude / source_types），改这里即时生效，无需改代码 |
 | `rag/config/task-routes.json` | 7 个任务类型的路由定义 |
 | `rag/config/categories.json` | 分类定义 |
 
