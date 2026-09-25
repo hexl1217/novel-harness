@@ -24,11 +24,17 @@
 
 ## 二、机器已接管（不要人工逐条核对）
 
-以下条款已经由 `agent_core/check_draft.py` 做成确定性校验，报错带精确行号。**不要预读、不要逐条自查、不要在交付清单里手打 ✓**：
+以下条款已经做成确定性校验，报错带精确行号。**不要预读、不要逐条自查、不要在交付清单里手打 ✓**。
+
+工具分成两块，方向相反、互相不可替代 —— **两块都要跑**：
+
+### 表零A · 减法：不该出现什么（硬门禁）
 
 ```bash
 python -m agent_core.check_draft projects/{项目}/正文/第{N}章.md
 ```
+
+`error` 必须清零才继续。
 
 | 原规则位置 | 机器检查内容 |
 |:-----------|:-------------|
@@ -43,7 +49,30 @@ python -m agent_core.check_draft projects/{项目}/正文/第{N}章.md
 | `draft-output-map` | 正文路径约定、字数偏离目标 |
 | `cases/feedback/2026-09-24-数字生硬.md` | 算式独立成行 |
 
+### 表零B · 加法：应该出现什么（画像与提示）
+
+```bash
+python -m agent_core.draft_metrics projects/{项目}/正文/第{N}章.md
+```
+
+`warn` 是「缺了什么」的提示，逐条判断**补还是不改**并写一句理由。它**不否决交付**，但没有它，下面的加法条款就全靠自觉 —— 而自觉对 LLM 近乎零成本。
+
+| 原规则位置 | 机器检查内容 |
+|:-----------|:-------------|
+| `句式节奏档案` 4.1 | 长度相近句串（含整串跨度，递降不算均匀）、全文有无极短句 |
+| `writing-execution-map` | 连续同长度短段 |
+| `写作Agent` Step 4 | 连续等长对话（通篇一问一答） |
+| `写作Agent` 场景三维度·感知 | 视觉之外的感官通道覆盖 |
+| `语病诊断手册` 2.11 | 重复强调是否完全缺失 |
+| `SKILL` 原则 1 / `句式节奏档案` 4.6 | 口语标记密度（口气）、「把」字句、停顿段 |
+| `语病诊断手册` 2.3 / 2.4 / 2.5 / 2.6 / 2.8 / 2.9 | 动作链、情感标签、因果链、清单式罗列、段尾盖章、多余时间副词 |
+| `SKILL` 原则 2 | 叙述内精确数值+单位 |
+
 跑完只看它报出的条目。**没报的不要再翻原文件确认一遍**。
+
+### 两边都抓不到的部分
+
+判断类的问题（剧情是否可信、角色动机是否成立、这段留白是好还是空洞）**两边都不管**，仍然由 Agent 判断。不要把「两个脚本都绿了」当成「这一章写得好」。
 
 ---
 
@@ -57,8 +86,12 @@ python -m agent_core.check_draft projects/{项目}/正文/第{N}章.md
 | 涉及角色状态、伏笔登记、事件索引 | `rules/maps/state-tracking-map.md` |
 | 规划阶段（不在单章写作路径内） | `rules/maps/planning-continuity-map.md` |
 | 题材专项（数据化降临 / 游戏异界等） | `skills/game-datafied/SKILL.md` + `project-templates/模板-{题材}.md` |
-| 用户说「太 AI 味」 | `skills/human-linguistics/rules/去AI味最小修改指南.md` |
+| 用户说「太 AI 味」 | `skills/human-linguistics/rules/去AI味最小修改指南.md`（改写**顺序**与边界） |
 | `check_draft` 报出某条语病，要看透成因 | `skills/human-linguistics/rules/语病诊断手册.md` 对应小节 |
+| `draft_metrics` 报出节奏类条目（均匀句串／极短句／均匀段串） | `skills/human-linguistics/rules/句式节奏档案.md` 4.1 / 4.3 对应小节 |
+| `draft_metrics` 报出口气类条目（口语密度／叠词／把字句／停顿段） | `skills/human-linguistics/rules/句式节奏档案.md` 4.4 / 4.5 / 4.6 + `SKILL.md` 原则 1 |
+| `draft_metrics` 报出感官通道缺失 | `rules/maps/writing-execution-map.md` 场景三维度织入 |
+| 要换掉某个 AI 表达 | `skills/human-linguistics/rules/语感对照词典.md` 查人话替代 |
 | 需要题材语感 / 平台口气 / 场景细节 | `.harness/knowledge/`（经 RAG 查询） |
 
 **判断类规则永远不在机器层**：什么算好对白、真人冗余该留还是该删、语感是否跟情绪走、梗是否过载 —— 这些必须由 Agent 判断，但它们也不该靠「通读 462 行正则规则」来保证。

@@ -39,14 +39,15 @@
 |:-----|:---------|
 | 去 AI 味 | `.harness/skills/human-linguistics/rules/去AI味最小修改指南.md` |
 | 查语病 | `.harness/skills/human-linguistics/rules/语病诊断手册.md` |
-| 句式节奏 | `.harness/skills/human-linguistics/rules/句式节奏档案.md` |
+| 句式节奏 | `.harness/skills/human-linguistics/rules/句式节奏档案.md`（4.1 / 4.4 / 4.5 / 4.6 的可判定部分已由 `draft_metrics` 接管） |
 | 角色关系 | `.harness/skills/plot-review/rules/角色关系金字塔.md` |
 | 角色知识边界 | `.harness/skills/plot-review/rules/角色知识边界.md` |
 | 状态一致性 | `.harness/skills/plot-review/rules/状态一致性补充清单.md` |
 | 大纲质量 | `.harness/skills/plot-review/rules/大纲质量评估清单.md` |
 | 阅读体验 | `.harness/skills/rhythm-review/references/阅读体验与章节润色检查.md` |
 | 写前准备 | `.harness/skills/plot-ideation/references/章节写前准备清单.md` |
-| 正文机器预检 | `agent_core/check_draft.py`（正文过一遍可判定规则；`make check-draft`；审稿清单表零、交付清单「机器预检」行都用它） |
+| 正文机器预检·减法 | `agent_core/check_draft.py`（「不该出现什么」：禁句/指纹词/段落超长…；`make check-draft`；审稿清单**表零A**、交付清单「机器预检」行都用它） |
+| 正文机器预检·加法 | `agent_core/draft_metrics.py`（「应该出现什么」：节奏均匀串/极短句/感官通道/口语密度/重复强调缺失…；`make draft-metrics`；审稿清单**表零B**）。**只跑减法会漏掉整类问题**，两个必须成对 |
 | 运行时状态落盘 | `agent_core/state.py`（挂起恢复栈、开书阶段 S0–S5、已锁定题材/平台/知识包 → `.harness/state/runtime.json`；`python -m agent_core.state show`） |
 | **单章必读索引** | `.harness/rules/maps/chapter-required-reading.md`（**写章/审稿的默认加载集合入口**，避免预读全部规则；其余规则按触发条件加载） |
 | 正文落盘门禁 | `.harness/rules/maps/draft-output-map.md` |
@@ -59,7 +60,7 @@
 | 对话权力与议程 | `.harness/rules/maps/writing-execution-map.md` |
 | 最小记忆包 | `.harness/rules/maps/state-tracking-map.md` |
 | 章节质量检查 | `.harness/rules/maps/quality-check-map.md` |
-| 审稿强制执行清单 | `.harness/rules/maps/review-execution-checklist.md`（审稿 Agent 每次审查逐行执行表一~表七，含分镜脚本专项） |
+| 审稿强制执行清单 | `.harness/rules/maps/review-execution-checklist.md`（审稿 Agent 每次审查先跑表零A/表零B 机器预检，再逐行执行表一~表七，含分镜脚本专项） |
 | 状态追踪协议 | `.harness/rules/maps/state-tracking-map.md` |
 | 人物视角边界 | `.harness/rules/maps/perspective-boundary-map.md` |
 | 叙事视角配置 | `.harness/rules/maps/perspective-boundary-map.md` |

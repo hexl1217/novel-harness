@@ -49,8 +49,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: 正文机器预检（projects/ 为空时自动跳过）
+      - name: 正文机器预检·减法（projects/ 为空时自动跳过）
         run: python -m agent_core.check_draft projects --allow-empty
+      - name: 正文机器预检·加法（projects/ 为空时自动跳过）
+        run: python -m agent_core.draft_metrics projects --allow-empty
 
   schema:
     runs-on: ubuntu-latest

@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: install test test-rag test-agent lint run build clean check-draft verify verify-full benchmark baseline help
+.PHONY: install test test-rag test-agent lint run build clean check-draft draft-metrics verify verify-full benchmark baseline help
 
 DRAFT ?=
 
@@ -10,6 +10,7 @@ help:
 	@echo "  make test-rag   仅 RAG 测试"
 	@echo "  make test-agent 仅 Agent 引擎测试"
 	@echo "  make check-draft 正文机器预检 (DRAFT=projects/项目/正文/第N章.md)"
+	@echo "  make draft-metrics 正文人味/节奏画像 (DRAFT=projects/项目/正文/第N章.md)"
 	@echo "  make verify     RAG 端到端验收（复用现有索引，需 remote 知识包）"
 	@echo "  make verify-full 端到端验收（先重建索引）"
 	@echo "  make benchmark  检索基准测试（Recall@5 + 延迟）"
@@ -37,6 +38,10 @@ check-draft:
 	@test -n "$(DRAFT)" || (echo "用法：make check-draft DRAFT=projects/项目/正文/第N章.md"; exit 2)
 	python -m agent_core.check_draft $(DRAFT)
 
+draft-metrics:
+	@test -n "$(DRAFT)" || (echo "用法：make draft-metrics DRAFT=projects/项目/正文/第N章.md"; exit 2)
+	python -m agent_core.draft_metrics $(DRAFT)
+
 lint:
 	@echo "=== pyflakes ==="
 	@python -m pyflakes rag/src/ agent_core/ 2>&1 || true
@@ -55,10 +60,8 @@ up:
 	docker compose up -d
 
 clean:
-	find . -type d -name '__pycache__' -exec rm -rf {} + 2>/dev
-ull || true
-	find . -type d -name '.pytest_cache' -exec rm -rf {} + 2>/dev
-ull || true
+	find . -type d -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name '.pytest_cache' -prune -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name '*.pyc' -delete
 	@echo "清理完成"
 
