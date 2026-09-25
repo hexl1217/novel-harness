@@ -8,6 +8,7 @@
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -22,9 +23,54 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 PACKS_DIR = PROJECT_ROOT / ".harness" / "knowledge" / "packs"
 REMOTE_DIR = PROJECT_ROOT / ".harness" / "knowledge" / "remote"
 INCLUDED_MANIFEST = PACKS_DIR / "included.manifest.json"
-DEFAULT_REMOTE_MANIFEST = "http://47.103.57.247:9000/manifest"
 
 ALLOWED_EXTENSIONS = {".md", ".txt", ".json", ".yaml", ".yml"}
+
+MANIFEST_ENV_KEY = "NOVEL_HARNESS_REMOTE_MANIFEST"
+
+MANIFEST_SETUP_HINT = (
+    f"未配置远程知识包市场地址（{MANIFEST_ENV_KEY}）。请任选一种方式配置后重试："
+    f"\n  1. 在项目根目录创建 .env，写入 {MANIFEST_ENV_KEY}=<你的 manifest 地址>"
+    f"\n  2. 设置同名环境变量 {MANIFEST_ENV_KEY}"
+    "\n  3. 命令行指定（需放在子命令之前）：sync_packs.py --manifest <地址> <子命令>"
+)
+
+
+def load_dotenv(path=None):
+    """极简 .env 读取，避免引入第三方依赖。
+
+    只填充尚未设置的环境变量：已存在的环境变量优先级更高，
+    因此命令行与容器注入的值不会被 .env 覆盖。
+    """
+    env_file = Path(path) if path else (PROJECT_ROOT / ".env")
+    if not env_file.is_file():
+        return
+
+    for raw_line in env_file.read_text(encoding="utf-8-sig").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+
+        os.environ[key] = value.strip().strip('"').strip("'")
+
+
+load_dotenv()
+
+# 无内置默认值：避免把部署地址写进公开仓库
+DEFAULT_REMOTE_MANIFEST = os.environ.get(MANIFEST_ENV_KEY, "").strip()
+
+
+def _require_manifest_source(path_or_url=None):
+    """返回可用的 manifest 地址，未配置时给出配置指引。"""
+    source = str(path_or_url or DEFAULT_REMOTE_MANIFEST or "").strip()
+    if not source:
+        raise SystemExit(MANIFEST_SETUP_HINT)
+    return source
 
 
 def _load_json(path_or_url):
@@ -103,7 +149,7 @@ def _normalize_packs_payload(payload, base_url, pack_type, types):
 
 
 def _load_remote_types(path_or_url=None):
-    manifest_source = path_or_url or DEFAULT_REMOTE_MANIFEST
+    manifest_source = _require_manifest_source(path_or_url)
     try:
         return _load_remote_manifest(manifest_source).get("types", [])
     except (urllib.error.HTTPError, urllib.error.URLError):
@@ -124,7 +170,7 @@ def _load_type_packs_endpoint(path_or_url, pack_type):
 
 
 def _load_remote_manifest(path_or_url=None, pack_type=None):
-    manifest_source = path_or_url or DEFAULT_REMOTE_MANIFEST
+    manifest_source = _require_manifest_source(path_or_url)
     try:
         manifest = _load_json(_with_type_query(manifest_source, pack_type))
     except (urllib.error.HTTPError, urllib.error.URLError):

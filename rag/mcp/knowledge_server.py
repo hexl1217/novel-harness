@@ -153,7 +153,7 @@ class MCPKnwoledgeServer:
                         "properties": {
                             "manifest_url": {
                                 "type": "string",
-                                "description": "可选：远程 manifest URL，默认使用项目内置的知识包市场地址",
+                                "description": "可选：远程 manifest URL，未传时读取 NOVEL_HARNESS_REMOTE_MANIFEST（.env 或环境变量）",
                             },
                             "include_remote": {
                                 "type": "boolean",

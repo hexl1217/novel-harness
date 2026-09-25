@@ -73,7 +73,13 @@ python rag/scripts/sync_packs.py installed
 python rag/scripts/build_index.py
 ```
 
-仓库已内置测试版知识包市场地址，默认会读取；一般不需要手动传 manifest 地址。
+使用云端市场前，先在项目根目录的 `.env` 里配置市场地址（该文件已被 `.gitignore` 忽略，不会被提交）：
+
+```text
+NOVEL_HARNESS_REMOTE_MANIFEST=<你的 manifest 地址>
+```
+
+也可以改用环境变量注入，适合容器与 CI 场景。仓库不内置任何市场地址；未配置时命令会直接提示配置方式，不会静默失败。
 
 安装云端知识包：
 
@@ -82,7 +88,7 @@ python rag/scripts/sync_packs.py list --include-remote
 python rag/scripts/sync_packs.py install topic-xuanhuan --rebuild-index
 ```
 
-如果你要临时测试其他 manifest，可以继续使用 `--manifest <远程manifest地址>` 覆盖默认市场。
+要临时使用其他 manifest，可用 `--manifest <远程manifest地址>` 覆盖，注意该参数需放在子命令之前。
 
 ## 版权边界
 

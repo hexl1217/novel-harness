@@ -108,7 +108,7 @@ python rag/scripts/build_index.py
 python rag/mcp/knowledge_server.py
 ```
 
-默认已配置测试版知识包市场，一般不需要手动传 manifest 地址。
+使用云端知识包市场前，需在项目根目录的 `.env` 中配置 `NOVEL_HARNESS_REMOTE_MANIFEST`（也可用同名环境变量注入）；仓库不内置市场地址，未配置时相关命令会给出配置提示。
 
 当前可用工具：
 
