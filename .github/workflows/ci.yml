@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+    paths-ignore: ['docs/**', '**.md']
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install pyflakes pycodestyle
+      - run: pyflakes rag/src/ agent_core/
+      - run: pycodestyle rag/src/ agent_core/ --max-line-length=120 --ignore=E402,W503
+
+  test-rag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r rag/requirements.txt
+      - run: python -m pytest rag/test/ -v --tb=short -x
+
+  test-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install pytest
+      - run: python -m pytest agent_core/test/ -v --tb=short -x
+
+  schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate JSON schemas
+        run: |
+          python -c "
+          import json, sys, glob
+          errors = 0
+          for f in glob.glob('rag/schemas/*.json') + glob.glob('rag/config/*.json'):
+              try:
+                  json.load(open(f))
+              except json.JSONDecodeError as e:
+                  print(f'INVALID {f}: {e}')
+                  errors += 1
+          if errors:
+              sys.exit(1)
+          print(f'All JSON schemas valid')
+          "
+      - name: Validate all Python files parse
+        run: |
+          python -c "
+          import ast, os, sys
+          errors = 0
+          for root, dirs, files in os.walk('.'):
+              if '.git' in root or '__pycache__' in root:
+                  continue
+              for f in files:
+                  if f.endswith('.py'):
+                      try:
+                          ast.parse(open(os.path.join(root, f)).read())
+                      except SyntaxError as e:
+                          print(f'FAIL {os.path.join(root, f)}: {e}')
+                          errors += 1
+          if errors:
+              sys.exit(1)
+          print('All Python files parse OK')
+          "

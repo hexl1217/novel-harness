@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  rag:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3456:3456"
+    volumes:
+      - .harness:/app/.harness
+      - rag-data:/app/rag/data
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - NOVEL_HARNESS_REMOTE_MANIFEST=${NOVEL_HARNESS_REMOTE_MANIFEST:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3456/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  rag-data:
