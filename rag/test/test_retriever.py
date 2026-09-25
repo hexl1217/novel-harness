@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from rag.src import bm25_retriever
-from rag.src.retriever import hybrid_retrieve
+from rag.src.retriever import _retrieve_fts, hybrid_retrieve
 from rag.src.storage import sqlite_store, vector_store
 
 
@@ -104,3 +104,51 @@ class TestHybridRetriever:
     def test_retrieve_disallow_rerank(self):
         result = hybrid_retrieve(query="大纲", top_k=3, use_rerank=False)
         assert len(result["results"]) > 0
+
+
+class TestFtsChannelIsQueryDriven:
+    """回归：_retrieve_fts 必须真正做全文检索。
+
+    历史 bug：只要任务路由配了 categories，它就调用 ``filter_chunks``
+    （``ORDER BY priority``）**替代** ``fts_search``，返回与查询无关的固定候选
+    序列，并把所有候选统一赋 -0.1 兜底分。函数名叫 fts，实际没做检索。
+    """
+
+    ROUTE = {"categories": ["humanization", "outline"], "stages": []}
+
+    def test_ranking_is_not_priority_ordering(self):
+        """全文检索的结果不应恰好等于「按 priority 列举的全量候选」。"""
+        fts_ids = [r["chunk_id"] for r in _retrieve_fts("去AI味", self.ROUTE, 10)]
+        priority_ids = [
+            r["chunk_id"]
+            for r in sqlite_store.filter_chunks(categories=self.ROUTE["categories"], top_n=10)
+        ]
+        assert fts_ids, "全文检索应召回候选"
+        assert fts_ids != priority_ids, (
+            "_retrieve_fts 返回了按 priority 排列的固定序列 —— 说明它又退回用"
+            " filter_chunks 替代全文检索了"
+        )
+
+    def test_channel_equals_fts_search_when_hits_exist(self):
+        """有全文命中时，FTS 路应当就是 fts_search 的结果。
+
+        不依赖分数绝对量级（FTS5 的 bm25() 在小语料下会退化成 0 附近），
+        只验证「走的确实是全文检索这条路径」。
+        """
+        direct = sqlite_store.fts_search("去AI味", 10)
+        assert direct, "前置条件：fts_search 对中文查询应有命中"
+        via_channel = _retrieve_fts("去AI味", self.ROUTE, 10)
+        assert [r["chunk_id"] for r in via_channel] == [r["chunk_id"] for r in direct]
+
+    def test_ranking_varies_with_query(self):
+        """不同查询应得到不同排序（同一批类别候选下）。"""
+        a = [r["chunk_id"] for r in _retrieve_fts("去AI味", self.ROUTE, 10)]
+        b = [r["chunk_id"] for r in _retrieve_fts("outline", self.ROUTE, 10)]
+        assert a and b
+        assert a != b
+
+    def test_falls_back_to_category_when_no_text_match(self):
+        """全文检索无结果时退回类别候选，保证任务域内仍有上下文。"""
+        route = {"categories": ["humanization"], "stages": []}
+        rows = _retrieve_fts("zqxjv不存在的词kwmz", route, 10)
+        assert rows, "无全文命中时应退回类别候选兜底"

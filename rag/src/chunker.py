@@ -133,6 +133,16 @@ def chunk_markdown(document):
     chunks = []
     lines = content.split("\n")
     current_section_lines = []
+    # 标题层级栈：[(level, text), ...]，栈底放文档标题。
+    #
+    # 每个 chunk 的 title 记录**完整层级路径**（如
+    # "去AI味最小修改指南 > 1. 先检测，再动刀"），而不是只留最内层的小节名。
+    # 只留小节名会让各文档通用的小节标题互相撞车：实测 8750 个 chunk 只有
+    # 2537 个不同标题，单是「输出要求」就有 1729 个 chunk 共用，
+    # 「输出格式」478 个、「系统角色」461 个。检索时这些 chunk 无法从标题
+    # 区分来自哪篇文档，而它们的正文往往是短表格/模板片段，词密度偏高，
+    # 于是反复挤掉真正相关的答案（详见 rag/test/baseline.json 的失败项）。
+    heading_stack = [(1, document["title"])]
     current_heading = document["title"]
     current_level = 1
 
@@ -187,9 +197,14 @@ def chunk_markdown(document):
             level = len(heading_match.group(1))
             heading_text = heading_match.group(2).strip()
 
-            # 跳过标题行自身（它已经被识别为分割标记）
+            # 维护层级栈：先弹出所有层级不低于当前标题的旧标题，
+            # 再把当前标题压栈。栈内路径即该小节在文档中的位置。
+            while heading_stack and heading_stack[-1][0] >= level:
+                heading_stack.pop()
+            heading_stack.append((level, heading_text))
+
             current_level = level
-            current_heading = heading_text
+            current_heading = " > ".join(t for _, t in heading_stack if t)
             # 不把标题行本身加入内容
             continue
 

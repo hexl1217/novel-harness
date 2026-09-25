@@ -84,30 +84,31 @@ def hybrid_retrieve(query, task_type=None, top_k=5, fts_n=30, vec_n=30, bm25_n=3
 
 
 def _retrieve_fts(query, task_route, fts_n):
-    fts_results = []
-    categories = task_route.get("categories", [])
-    stages = task_route.get("stages", [])
+    """全文检索通道。
 
-    if categories:
-        filtered = sqlite_store.filter_chunks(categories=categories, stages=stages, top_n=fts_n)
-        for row in filtered:
-            text = (row.get("title", "") + " " + row.get("text", "")).lower()
-            terms = [t for t in query.lower().split() if t]
-            score = 0
-            for term in terms:
-                if term in text:
-                    score -= 1
-            if row.get("title", "").lower() and any(term in row["title"].lower() for term in terms):
-                score -= 3
-            row["fts_score"] = score if score < 0 else -0.1
-            fts_results.append(row)
-        fts_results = [r for r in fts_results if r.get("fts_score", 0) < 0]
+    全文检索优先走 ``fts_search``：它使用 FTS5 + 与写入端一致的 CJK 预分词，
+    是唯一能做子串级中文匹配的通道。
 
-    if not fts_results:
-        fts_results = sqlite_store.fts_search(query, fts_n)
-        for r in fts_results:
-            r["fts_score"] = r.get("fts_score", 0)
-    return fts_results
+    历史实现用 ``filter_chunks`` **替代**了全文检索：只要任务路由配了
+    categories，返回的就是「ORDER BY priority 的前 N 个同类 chunk」，与 query
+    完全无关；又因为中文查询经 ``split()`` 后只剩一个整词、子串匹配必然失败，
+    所有候选还被统一赋 -0.1 的兜底分。双重失效——函数名叫 fts，实际没做检索。
+
+    现在全文检索是主路径，类别候选降为**兜底**（仅当全文检索无结果时使用，
+    例如查询全是停用词），保证任务域内仍有可用上下文。任务先验本就由
+    ``_compute_task_match`` 统一承担，不该在这里重复，更不该污染相关性分。
+    """
+    results = sqlite_store.fts_search(query, fts_n)
+    if results:
+        return results
+
+    categories = (task_route or {}).get("categories", [])
+    stages = (task_route or {}).get("stages", [])
+    if categories or stages:
+        return sqlite_store.filter_chunks(
+            categories=categories, stages=stages, top_n=fts_n
+        )
+    return results
 
 
 def _retrieve_vector(query, vec_n):
