@@ -1,5 +1,7 @@
 SHELL := /bin/bash
-.PHONY: install test lint run build clean help
+.PHONY: install test lint run build clean check-draft help
+
+DRAFT ?=
 
 help:
 	@echo "novel-harness 开发命令"
@@ -7,6 +9,7 @@ help:
 	@echo "  make test       运行所有测试"
 	@echo "  make test-rag   仅 RAG 测试"
 	@echo "  make test-agent 仅 Agent 引擎测试"
+	@echo "  make check-draft 正文机器预检 (DRAFT=projects/项目/正文/第N章.md)"
 	@echo "  make lint       pyflakes + pycodestyle 检查"
 	@echo "  make run        启动 RAG HTTP 服务 (localhost:3456)"
 	@echo "  make build      构建 Docker 镜像"
@@ -25,6 +28,10 @@ test-rag:
 
 test-agent:
 	python -m pytest agent_core/test/ -v --tb=short
+
+check-draft:
+	@test -n "$(DRAFT)" || (echo "用法：make check-draft DRAFT=projects/项目/正文/第N章.md"; exit 2)
+	python -m agent_core.check_draft $(DRAFT)
 
 lint:
 	@echo "=== pyflakes ==="
