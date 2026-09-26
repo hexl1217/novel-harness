@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: install test test-rag test-agent lint run build clean check-draft draft-metrics verify verify-full benchmark baseline help
+.PHONY: install test test-rag test-agent lint run build clean check-draft draft-metrics verify verify-full benchmark baseline consistency help
 
 DRAFT ?=
 
@@ -15,6 +15,7 @@ help:
 	@echo "  make verify-full 端到端验收（先重建索引）"
 	@echo "  make benchmark  检索基准测试（Recall@5 + 延迟）"
 	@echo "  make baseline   重新记录检索质量基线"
+	@echo "  make consistency 规则层/机器层/执行层一致性对账"
 	@echo "  make lint       pyflakes + pycodestyle 检查"
 	@echo "  make run        启动 RAG HTTP 服务 (localhost:3456)"
 	@echo "  make build      构建 Docker 镜像"
@@ -42,11 +43,14 @@ draft-metrics:
 	@test -n "$(DRAFT)" || (echo "用法：make draft-metrics DRAFT=projects/项目/正文/第N章.md"; exit 2)
 	python -m agent_core.draft_metrics $(DRAFT)
 
+consistency:
+	python tools/consistency_probe.py
+
 lint:
 	@echo "=== pyflakes ==="
-	@python -m pyflakes rag/src/ agent_core/ 2>&1 || true
+	@python -m pyflakes rag/src/ agent_core/ tools/ 2>&1 || true
 	@echo "=== pycodestyle ==="
-	@python -m pycodestyle rag/src/ agent_core/ --max-line-length=120 --ignore=E402,W503 2>&1 || true
+	@python -m pycodestyle rag/src/ agent_core/ tools/ --max-line-length=120 --ignore=E402,W503 2>&1 || true
 	@echo "=== Python syntax ==="
 	@python -c "import ast, os; errors=[os.path.join(r,f) for r,_,fs in os.walk('.') for f in fs if f.endswith('.py') and '.git' not in r for error in [ast.parse(open(os.path.join(r,f)).read())] if False] or print('OK')"
 

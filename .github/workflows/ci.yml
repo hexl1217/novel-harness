@@ -3,7 +3,9 @@ name: CI
 on:
   push:
     branches: [main, master]
-    paths-ignore: ['docs/**', '**.md']
+    # 注意：不忽略 `**.md`。规则层（.harness/**/*.md）与机器层的一致性
+    # 由 consistency job 校验，忽略 md 会让「只改文档造成的三层漂移」逃过 CI。
+    paths-ignore: ['docs/**']
   pull_request:
     branches: [main, master]
 
@@ -17,8 +19,18 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: python -m pip install pyflakes pycodestyle
-      - run: pyflakes rag/src/ agent_core/
-      - run: pycodestyle rag/src/ agent_core/ --max-line-length=120 --ignore=E402,W503
+      - run: pyflakes rag/src/ agent_core/ tools/
+      - run: pycodestyle rag/src/ agent_core/ tools/ --max-line-length=120 --ignore=E402,W503
+
+  consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 规则层 / 机器层 / 执行层 一致性对账
+        run: python tools/consistency_probe.py
 
   test-rag:
     runs-on: ubuntu-latest

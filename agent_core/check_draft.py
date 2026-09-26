@@ -62,8 +62,12 @@ IDENTITY_TAG_PATTERN = re.compile(r"(作为|身为)[^，。！？\n]{1,15}的")
 # 规则原文——人物嘴上/心里/手写的一律用汉字；材料、白板、凭条、屏幕上的数字照抄原形。
 # 且明确「保留不动」的是**载体承载**的算式（如老谭铅笔写在纸上的
 # `九十四天 × 二百元 = 一万八千八`）。因此本检查必须区分载体与叙述：
-#   命中 FORMULA_LINE_PATTERN 且**不在载体语境**中 → 报错（算式顶替动作）
+#   命中 FORMULA_LINE_PATTERN 且**不在载体语境**中 → error（算式顶替动作）
 #   位于载体语境（白板/凭条/屏幕/台账…）→ 静默豁免
+#
+# 命名约定：本组检查在文档层统一称「数字出场分层」（见 `chapter-required-reading.md`
+# 表零A 与 `review-execution-checklist.md`），issue 的 rule 字段沿用该称法，
+# 与 `tools/consistency_probe.py` 的 P4 检查对齐。改动时三处同步。
 FORMULA_LINE_PATTERN = re.compile(
     r"^\s*[\d.]+\s*[+\-*/×÷]\s*[\d.]+(?:\s*[+\-*/×÷]\s*[\d.]+)*\s*="
 )
@@ -209,7 +213,7 @@ def check_text(text: str, path: Path | None = None, target_words: int | None = N
         # FORMULA_LINE_PATTERN 锚行首，抓不到嵌在句子里的对白算式，故单独判。
         for match in DIALOGUE_FORMULA_PATTERN.finditer(line):
             if _inside_quote(line, match.start()):
-                issues.append(Issue("error", "反馈案例 2026-09-24 · 数字出场分层（对白）", idx + 1,
+                issues.append(Issue("error", "数字出场分层（对白）· 反馈案例 2026-09-24", idx + 1,
                                     f"对白内阿拉伯算式「{match.group(0)}」，应改为汉字", excerpt(idx)))
                 break
 
@@ -263,7 +267,7 @@ def check_text(text: str, path: Path | None = None, target_words: int | None = N
         context = para_of_line.get(idx + 1, line)
         if any(word in context for word in CARRIER_WORDS):
             continue  # 载体承载，规则明确「保留不动」
-        issues.append(Issue("error", "反馈案例 2026-09-24 · 数字出场分层（叙述）", idx + 1,
+        issues.append(Issue("error", "数字出场分层（叙述）· 反馈案例 2026-09-24", idx + 1,
                             "算式独立成行顶替人物动作，应改为动作+汉字结果", excerpt(idx)))
 
     # 语病诊断手册 2.1：连续两段以过渡词开头
