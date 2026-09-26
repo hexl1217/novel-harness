@@ -7,7 +7,7 @@
 - `.harness/rules/maps/writing-execution-map.md`              单段/单句长度上限
 - `.harness/skills/human-linguistics/rules/语病诊断手册.md`    T0 禁句、指纹词、进行病、身份标签、过渡词
 - `.harness/skills/human-linguistics/references/参考_AI人性化正则规则.md`  AI 废话短语、标点规范化
-- `.harness/cases/feedback/2026-09-24-数字生硬.md`             数字算式独立成行
+- `.harness/cases/feedback/2026-09-24-数字生硬.md`             数字出场分层（算式独立成行；载体承载则豁免）
 
 用法：
 
@@ -57,8 +57,27 @@ T0_PATTERN = re.compile(r"不是[^，。！？\n「」]{1,20}[，。]\s*(?:而�
 VERB_NOUN_PATTERN = re.compile(r"(进行|实施|做出|采取)(?:了|着)?[\u4e00-\u9fff]{1,4}")
 # 语病诊断手册 2.10：身份重复标签
 IDENTITY_TAG_PATTERN = re.compile(r"(作为|身为)[^，。！？\n]{1,15}的")
-# 反馈案例：算式独立成行
-FORMULA_LINE_PATTERN = re.compile(r"^\s*[\d.]+\s*[+\-*/×÷]\s*[\d.]+(?:\s*[+\-*/×÷]\s*[\d.]+)*\s*=")
+
+# 反馈案例 2026-09-24「数字出场分层」：算式独立成行。
+# 规则原文——人物嘴上/心里/手写的一律用汉字；材料、白板、凭条、屏幕上的数字照抄原形。
+# 且明确「保留不动」的是**载体承载**的算式（如老谭铅笔写在纸上的
+# `九十四天 × 二百元 = 一万八千八`）。因此本检查必须区分载体与叙述：
+#   命中 FORMULA_LINE_PATTERN 且**不在载体语境**中 → 报错（算式顶替动作）
+#   位于载体语境（白板/凭条/屏幕/台账…）→ 静默豁免
+FORMULA_LINE_PATTERN = re.compile(
+    r"^\s*[\d.]+\s*[+\-*/×÷]\s*[\d.]+(?:\s*[+\-*/×÷]\s*[\d.]+)*\s*="
+)
+# 载体词：算式若与这些词同段出现，视为「载体承载」，按规则豁免。
+# 依据 2026-09-24 反馈的「保留不动」清单与「精度该由载体承担」结论。
+CARRIER_WORDS = (
+    "白板", "凭条", "台账", "屏幕", "黑板", "纸", "本子", "表格", "材料",
+    "公文", "报表", "清单", "单据", "发票", "账单", "笔记本", "板子",
+)
+# 对白内算式：按「人物嘴上一律用汉字」直接违规，即便同段有载体词也不豁免。
+# 注意 FORMULA_LINE_PATTERN 用 ^ 锚定行首，只能抓「整行以算式开头」的情形
+# （反馈原文 §5 `41.64 + 406.26 + 279.48 = 727.38。` 独立成行）；
+# 对白里嵌在句子中的算式（`「12+8=20，错不了。」`）需要单独一条正则。
+DIALOGUE_FORMULA_PATTERN = re.compile(r"[+\-*/×÷=]\s*\d|\d\s*[+\-*/×÷]\s*\d")
 # 参考_AI人性化正则规则 5.x：标点规范化
 PUNCT_PATTERNS = (
     ('"', "ASCII 直双引号，应为「」", None),
@@ -139,6 +158,7 @@ def check_text(text: str, path: Path | None = None, target_words: int | None = N
         return raw_lines[i].strip()[:60] if 0 <= i < len(raw_lines) else ""
 
     # --- 逐行检查 ---
+    formula_candidates: list[tuple[int, str]] = []
     for idx, line in enumerate(lines):
         if not line.strip():
             continue
@@ -182,8 +202,16 @@ def check_text(text: str, path: Path | None = None, target_words: int | None = N
                                     desc, excerpt(idx)))
 
         if FORMULA_LINE_PATTERN.match(line):
-            issues.append(Issue("warn", "反馈案例 2026-09-24 · 算式顶替动作", idx + 1,
-                                "算式独立成行", excerpt(idx)))
+            # 载体豁免与否在段落级判断（见下方「数字出场分层」），此处仅记录候选。
+            formula_candidates.append((idx, line))
+
+        # 反馈案例 2026-09-24：对白/心理内的阿拉伯算式，规则要求一律用汉字。
+        # FORMULA_LINE_PATTERN 锚行首，抓不到嵌在句子里的对白算式，故单独判。
+        for match in DIALOGUE_FORMULA_PATTERN.finditer(line):
+            if _inside_quote(line, match.start()):
+                issues.append(Issue("error", "反馈案例 2026-09-24 · 数字出场分层（对白）", idx + 1,
+                                    f"对白内阿拉伯算式「{match.group(0)}」，应改为汉字", excerpt(idx)))
+                break
 
         for match in T0_PATTERN.finditer(line):
             if _inside_quote(line, match.start()):
@@ -217,6 +245,26 @@ def check_text(text: str, path: Path | None = None, target_words: int | None = N
             if len(sentence) > MAX_SENTENCE_CHARS:
                 issues.append(Issue("warn", "writing-execution-map · 段落与句子", line_no,
                                     f"单句 {len(sentence)} 字，超过 {MAX_SENTENCE_CHARS} 字上限", sentence[:60]))
+
+    # 反馈案例 2026-09-24「数字出场分层」：算式独立成行。
+    # 规则区分「载体承载」（白板/凭条/屏幕/台账… → 豁免）与「算式顶替动作」（→ error）。
+    # 对白内算式不豁免：规则要求「人物嘴上一律用汉字」。
+    para_of_line: dict[int, str] = {}
+    for line_no, para in paragraphs:
+        # 段落可能跨多行，逐行登记其所属段落文本
+        cursor = line_no - 1
+        while cursor < len(lines):
+            if not lines[cursor].strip():
+                break
+            para_of_line[cursor + 1] = para
+            cursor += 1
+
+    for idx, line in formula_candidates:
+        context = para_of_line.get(idx + 1, line)
+        if any(word in context for word in CARRIER_WORDS):
+            continue  # 载体承载，规则明确「保留不动」
+        issues.append(Issue("error", "反馈案例 2026-09-24 · 数字出场分层（叙述）", idx + 1,
+                            "算式独立成行顶替人物动作，应改为动作+汉字结果", excerpt(idx)))
 
     # 语病诊断手册 2.1：连续两段以过渡词开头
     prev_was_transition = False

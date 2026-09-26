@@ -47,7 +47,7 @@ python -m agent_core.check_draft projects/{项目}/正文/第{N}章.md
 | `参考_AI人性化正则规则` 八 | AI 废话短语表 |
 | `writing-execution-map` | 单段 > 60 字、单句 > 45 字 |
 | `draft-output-map` | 正文路径约定、字数偏离目标 |
-| `cases/feedback/2026-09-24-数字生硬.md` | 算式独立成行 |
+| `cases/feedback/2026-09-24-数字生硬.md` | 数字出场分层：算式独立成行顶替动作（叙述 error）；白板/凭条/屏幕等**载体承载的算式豁免**；对白/心里一律要求汉字 |
 
 ### 表零B · 加法：应该出现什么（画像与提示）
 

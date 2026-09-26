@@ -69,9 +69,31 @@ def test_consecutive_transition_paragraphs_is_warn():
     assert any("过渡词过度" in item.rule for item in issues)
 
 
-def test_formula_line_is_warn():
-    issues = check_text("41.64 + 406.26 + 279.48 = 727.38")
-    assert any("算式" in item.message for item in issues)
+def test_formula_line_in_narration_is_error():
+    """反馈 2026-09-24：算式独立成行顶替人物动作，属四类成因之一，判 error。"""
+    issues = check_text("他算了算。\n41.64 + 406.26 + 279.48 = 727.38")
+    assert any(item.level == "error" and "数字出场分层" in item.rule for item in issues)
+
+
+def test_formula_on_carrier_is_exempt():
+    """同一反馈「保留不动」清单：写在纸/白板上的算式由载体承载，不算生硬。"""
+    issues = check_text("老谭掏出铅笔，在纸上写：\n九十四天 × 二百元 = 一万八千八")
+    assert not [item for item in issues if "数字出场分层" in item.rule]
+
+    board = check_text("白板上写着：41.64 + 406.26 + 279.48 = 727.38")
+    assert not [item for item in board if "数字出场分层" in item.rule]
+
+
+def test_arabic_formula_in_dialogue_is_error():
+    """规则要求人物嘴上一律用汉字；DIALOGUE_FORMULA_PATTERN 负责嵌在句中的情形。"""
+    issues = check_text("他张嘴就来：「12+8=20，错不了。」")
+    assert any(item.level == "error" and "对白" in item.message for item in issues)
+
+
+def test_dialogue_wins_over_carrier():
+    """同段既有载体词又有对白算式时，对白优先判违规。"""
+    issues = check_text("白板上抄着数，他念：「12+8=20」。")
+    assert any(item.level == "error" and "对白" in item.message for item in issues)
 
 
 def test_system_panel_is_masked():

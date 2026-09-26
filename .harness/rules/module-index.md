@@ -66,6 +66,11 @@
 | 叙事视角配置 | `.harness/rules/maps/perspective-boundary-map.md` |
 | 短剧分镜脚本模板 | `.harness/rules/maps/short-drama-script-template.md`（每镜 11 字段 + 人物卡 9 字段 + 双 H3 出片 + 出片细化包通用空模板） |
 | 短视频文案规格 | `.harness/rules/maps/short-video-story-map.md`（抖音短视频规格 / 3 秒钩子 / 起承转合 / 话题拆解 / 文案形态 / 落盘约定） |
+| **反馈追踪流程** | `.harness/rules/反馈追踪流程.md`（**反馈追踪机制的唯一实体源**：核心流程、触发标准、3 次触发规则更新、文件命名与 `status` 字段、身份感知解读、模板位置；`cases/feedback/README.md` 只留目录说明） |
+| 通用编辑规范 | `.harness/rules/editorial-standards.md` |
+| 审稿输出格式 | `.harness/rules/审稿输出模板.md`（审稿报告的标准版式；表零A–D + 表一–七 的呈现方式） |
+| 用户分层适配 | `.harness/rules/用户身份适配指南.md`（Lv.1 零基础 / Lv.2 老书虫 / Lv.3 资深作者；总编 Agent Step 0.5 的支撑文件） |
+| **挂起恢复协议** | `.harness/rules/subagent-runtime.md`（可挂起临时任务的隔离与恢复；落盘要求见第 5 节 → `agent_core/state.py`） |
 
 ---
 
